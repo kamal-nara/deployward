@@ -88,4 +88,43 @@ final class BackupManagerTest extends TestCase
         $this->assertContains('20260101-000004-d', $remaining);
         $this->assertContains('20260101-000003-c', $remaining);
     }
+
+    public function test_ensure_protected_writes_guard_files(): void
+    {
+        $manager = new BackupManager($this->tmp . '/backups');
+        $manager->ensureProtected();
+
+        $this->assertFileExists($this->tmp . '/backups/index.php');
+        $this->assertFileExists($this->tmp . '/backups/.htaccess');
+    }
+
+    public function test_latest_returns_null_when_no_backups(): void
+    {
+        $manager = new BackupManager($this->tmp . '/backups');
+
+        $this->assertNull($manager->latest('nara-core'));
+    }
+
+    public function test_restore_latest_fails_when_no_backup(): void
+    {
+        $manager = new BackupManager($this->tmp . '/backups');
+
+        $result = $manager->restoreLatest('nara-core', $this->tmp . '/plugins/nara-core');
+
+        $this->assertFalse($result->isOk());
+    }
+
+    public function test_prune_deletes_the_old_backups(): void
+    {
+        $manager = new BackupManager($this->tmp . '/backups');
+        foreach (array('20260101-000001-a', '20260101-000002-b', '20260101-000003-c') as $name) {
+            mkdir($this->tmp . '/backups/nara-core/' . $name, 0777, true);
+        }
+
+        $manager->prune('nara-core', 1);
+
+        $this->assertDirectoryDoesNotExist($this->tmp . '/backups/nara-core/20260101-000001-a');
+        $this->assertDirectoryDoesNotExist($this->tmp . '/backups/nara-core/20260101-000002-b');
+        $this->assertDirectoryExists($this->tmp . '/backups/nara-core/20260101-000003-c');
+    }
 }

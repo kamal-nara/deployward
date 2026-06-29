@@ -51,11 +51,19 @@ final class BackupManager
         if ($latest === null) {
             return Result::fail('No backup available to restore');
         }
-        if (is_dir($targetDir)) {
-            $this->deleteDir($targetDir);
+        $sidecar = $this->baseDir . '/.restore-tmp-' . $slug . '-' . gmdate('YmdHis');
+        $hadTarget = is_dir($targetDir);
+        if ($hadTarget && ! @rename($targetDir, $sidecar)) {
+            return Result::fail('Could not set aside the current version for restore');
         }
         if (! @rename($latest, $targetDir)) {
+            if ($hadTarget) {
+                @rename($sidecar, $targetDir);
+            }
             return Result::fail('Could not restore backup into place');
+        }
+        if ($hadTarget) {
+            $this->deleteDir($sidecar);
         }
 
         return Result::ok($targetDir);
@@ -105,10 +113,10 @@ final class BackupManager
             \RecursiveIteratorIterator::CHILD_FIRST
         );
         foreach ($items as $item) {
-            if ($item->isDir()) {
-                @rmdir($item->getPathname());
-            } else {
+            if ($item->isLink() || ! $item->isDir()) {
                 @unlink($item->getPathname());
+            } else {
+                @rmdir($item->getPathname());
             }
         }
         @rmdir($dir);
