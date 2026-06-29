@@ -126,6 +126,16 @@ final class RestController
         return ApiResponse::ok(array('entries' => $entries, 'page' => $page));
     }
 
+    public function webhookInfo(string $id): ApiResponse
+    {
+        $deployment = $this->repository->find($id);
+        if ($deployment === null) {
+            return ApiResponse::error('Deployment not found', 404);
+        }
+
+        return ApiResponse::ok(array('secret' => $deployment->webhookSecret()));
+    }
+
     public function branches(array $params): ApiResponse
     {
         $repo = isset($params['repo']) ? (string) $params['repo'] : '';

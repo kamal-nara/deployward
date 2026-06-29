@@ -233,6 +233,29 @@ final class RestControllerTest extends TestCase
         $this->assertSame(strtolower($captured), $captured, 'Generated id must be lowercase so it survives sanitize_key in the route');
         $this->assertStringStartsWith('dw_', $captured);
     }
+
+    public function test_webhook_info_returns_secret_for_known_id(): void
+    {
+        $deployment = Deployment::fromArray(array(
+            'id' => 'dw_1', 'repo' => 'o/r', 'branch' => 'main', 'visibility' => 'public',
+            'target_type' => 'plugin', 'target_slug' => 'sample', 'token' => '', 'webhook_secret' => 'whsecret',
+        ));
+        $repo = Mockery::mock(DeploymentRepositoryInterface::class);
+        $repo->shouldReceive('find')->with('dw_1')->andReturn($deployment);
+
+        $response = $this->controller($repo)->webhookInfo('dw_1');
+
+        $this->assertSame(200, $response->status());
+        $this->assertSame('whsecret', $response->data()['secret']);
+    }
+
+    public function test_webhook_info_unknown_id_404(): void
+    {
+        $repo = Mockery::mock(DeploymentRepositoryInterface::class);
+        $repo->shouldReceive('find')->with('nope')->andReturn(null);
+
+        $this->assertSame(404, $this->controller($repo)->webhookInfo('nope')->status());
+    }
 }
 
 namespace Deployward\Tests\Unit\Http;
