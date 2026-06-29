@@ -20,6 +20,12 @@ final class Plugin
         $log = new DeployLog($wpdb);
         $log->installTable();
 
+        add_filter('cron_schedules', array(__CLASS__, 'cronInterval'));
+        self::ensureScheduled();
+    }
+
+    public static function ensureScheduled(): void
+    {
         if (! wp_next_scheduled(CronPoller::HOOK)) {
             wp_schedule_event(time(), CronPoller::INTERVAL, CronPoller::HOOK);
         }
@@ -44,6 +50,7 @@ final class Plugin
         $poller = new CronPoller($container->repository(), $container->github(), $scheduler);
 
         add_filter('cron_schedules', array(__CLASS__, 'cronInterval'));
+        self::ensureScheduled();
         add_action(DeployScheduler::HOOK, array($scheduler, 'run'), 10, 3);
         add_action(CronPoller::HOOK, array($poller, 'poll'));
 
