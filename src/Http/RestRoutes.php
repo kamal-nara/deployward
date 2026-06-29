@@ -9,9 +9,13 @@ final class RestRoutes
     /** @var RestController */
     private $controller;
 
-    public function __construct(RestController $controller)
+    /** @var WebhookController */
+    private $webhook;
+
+    public function __construct(RestController $controller, WebhookController $webhook)
     {
         $this->controller = $controller;
+        $this->webhook = $webhook;
     }
 
     public static function canManage(): bool
@@ -86,6 +90,27 @@ final class RestRoutes
             'permission_callback' => $permission,
             'callback' => function ($request) {
                 return $this->respond($this->controller->branches($this->params($request)));
+            },
+        ));
+
+        register_rest_route(self::NAMESPACE, '/deployments/(?P<id>[a-zA-Z0-9_-]+)/webhook', array(
+            'methods' => 'GET',
+            'permission_callback' => array(__CLASS__, 'canManage'),
+            'callback' => function ($request) {
+                return $this->respond($this->controller->webhookInfo(sanitize_key($request['id'])));
+            },
+        ));
+
+        register_rest_route(self::NAMESPACE, '/webhook/(?P<id>[a-zA-Z0-9_-]+)', array(
+            'methods' => 'POST',
+            'permission_callback' => '__return_true',
+            'callback' => function ($request) {
+                return $this->respond($this->webhook->handle(
+                    sanitize_key($request['id']),
+                    (string) $request->get_body(),
+                    $request->get_header('x-hub-signature-256'),
+                    $request->get_header('x-github-event')
+                ));
             },
         ));
     }
