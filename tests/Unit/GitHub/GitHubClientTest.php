@@ -101,4 +101,20 @@ final class GitHubClientTest extends TestCase
 
         $this->assertFalse($result->isOk());
     }
+
+    public function test_download_zipball_fails_on_wp_error(): void
+    {
+        $dest = sys_get_temp_dir() . '/dw-zip-' . uniqid() . '.zip';
+        Functions\when('is_wp_error')->justReturn(true);
+        Functions\when('wp_remote_get')->justReturn(new class {
+            public function get_error_message()
+            {
+                return 'connection refused';
+            }
+        });
+
+        $result = (new GitHubClient())->downloadZipball('Nara-IT/nara-core', 'main', null, $dest);
+
+        $this->assertFalse($result->isOk());
+    }
 }
