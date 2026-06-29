@@ -93,6 +93,69 @@ final class RestController
         return ApiResponse::ok(array('deleted' => $id));
     }
 
+    public function deployNow(string $id, bool $force): ApiResponse
+    {
+        $deployment = $this->repository->find($id);
+        if ($deployment === null) {
+            return ApiResponse::error('Deployment not found', 404);
+        }
+        $result = $this->deployer->deploy($deployment, 'manual', $force);
+
+        return $this->fromResult($result);
+    }
+
+    public function rollback(string $id): ApiResponse
+    {
+        $deployment = $this->repository->find($id);
+        if ($deployment === null) {
+            return ApiResponse::error('Deployment not found', 404);
+        }
+        $result = $this->deployer->rollback($deployment, 'manual-rollback');
+
+        return $this->fromResult($result);
+    }
+
+    public function deploymentLog(string $id, int $page, int $perPage = 20): ApiResponse
+    {
+        if ($this->repository->find($id) === null) {
+            return ApiResponse::error('Deployment not found', 404);
+        }
+        $offset = max(0, ($page - 1)) * $perPage;
+        $entries = $this->log->recent($id, $perPage, $offset);
+
+        return ApiResponse::ok(array('entries' => $entries, 'page' => $page));
+    }
+
+    public function branches(array $params): ApiResponse
+    {
+        $repo = isset($params['repo']) ? (string) $params['repo'] : '';
+        $visibility = isset($params['visibility']) ? (string) $params['visibility'] : 'public';
+        $token = ($visibility === 'private' && isset($params['token'])) ? (string) $params['token'] : null;
+        if ($token === '') {
+            $token = null;
+        }
+        $result = $this->github->listBranches($repo, $token);
+        if (! $result->isOk()) {
+            return ApiResponse::error($result->message(), 502);
+        }
+
+        return ApiResponse::ok(array('branches' => $result->data()));
+    }
+
+    private function fromResult(\Deployward\Support\Result $result): ApiResponse
+    {
+        if (! $result->isOk()) {
+            return ApiResponse::error($result->message(), 502, array('status' => 'failed'));
+        }
+        $status = $result->isSkipped() ? 'skipped' : 'success';
+        $data = array('status' => $status, 'message' => $result->message());
+        if (! $result->isSkipped() && is_string($result->data())) {
+            $data['sha'] = $result->data();
+        }
+
+        return ApiResponse::ok($data);
+    }
+
     private function present(Deployment $deployment): array
     {
         return array(

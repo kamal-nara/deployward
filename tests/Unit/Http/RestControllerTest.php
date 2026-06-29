@@ -119,4 +119,85 @@ final class RestControllerTest extends TestCase
 
         $this->assertSame(404, $response->status());
     }
+
+    public function test_deploy_now_maps_ok_result_to_200(): void
+    {
+        $repo = Mockery::mock(DeploymentRepositoryInterface::class);
+        $repo->shouldReceive('find')->with('dw_1')->andReturn($this->deployment());
+        $deployer = Mockery::mock(DeployerInterface::class);
+        $deployer->shouldReceive('deploy')->once()
+            ->with(Mockery::type(Deployment::class), 'manual', false)
+            ->andReturn(\Deployward\Support\Result::ok('newsha', 'Deployed newsha'));
+
+        $response = $this->controller($repo, $deployer)->deployNow('dw_1', false);
+
+        $this->assertSame(200, $response->status());
+        $this->assertSame('Deployed newsha', $response->data()['message']);
+    }
+
+    public function test_deploy_now_maps_failed_result_to_502(): void
+    {
+        $repo = Mockery::mock(DeploymentRepositoryInterface::class);
+        $repo->shouldReceive('find')->with('dw_1')->andReturn($this->deployment());
+        $deployer = Mockery::mock(DeployerInterface::class);
+        $deployer->shouldReceive('deploy')->andReturn(\Deployward\Support\Result::fail('boom'));
+
+        $response = $this->controller($repo, $deployer)->deployNow('dw_1', false);
+
+        $this->assertSame(502, $response->status());
+    }
+
+    public function test_deploy_now_unknown_id_404(): void
+    {
+        $repo = Mockery::mock(DeploymentRepositoryInterface::class);
+        $repo->shouldReceive('find')->with('nope')->andReturn(null);
+
+        $this->assertSame(404, $this->controller($repo)->deployNow('nope', false)->status());
+    }
+
+    public function test_log_returns_entries(): void
+    {
+        $repo = Mockery::mock(DeploymentRepositoryInterface::class);
+        $repo->shouldReceive('find')->with('dw_1')->andReturn($this->deployment());
+        $log = Mockery::mock(DeployLogInterface::class);
+        $log->shouldReceive('recent')->with('dw_1', 20, 0)->andReturn(array(array('id' => 1, 'status' => 'success')));
+
+        $response = $this->controller($repo, null, $log)->deploymentLog('dw_1', 1, 20);
+
+        $this->assertSame(200, $response->status());
+        $this->assertSame('success', $response->data()['entries'][0]['status']);
+    }
+
+    public function test_branches_success(): void
+    {
+        $github = Mockery::mock(GitHubClientInterface::class);
+        $github->shouldReceive('listBranches')->andReturn(\Deployward\Support\Result::ok(array('main', 'dev')));
+
+        $response = $this->controller(Mockery::mock(DeploymentRepositoryInterface::class), null, null, $github)
+            ->branches(array('repo' => 'Nara-IT/nara-core', 'visibility' => 'public'));
+
+        $this->assertSame(200, $response->status());
+        $this->assertSame(array('main', 'dev'), $response->data()['branches']);
+    }
+
+    public function test_branches_failure_502_without_token_leak(): void
+    {
+        $github = Mockery::mock(GitHubClientInterface::class);
+        $github->shouldReceive('listBranches')->andReturn(\Deployward\Support\Result::fail('GitHub returned HTTP 401'));
+
+        $response = $this->controller(Mockery::mock(DeploymentRepositoryInterface::class), null, null, $github)
+            ->branches(array('repo' => 'Nara-IT/p', 'visibility' => 'private', 'token' => 'ghp_secret'));
+
+        $this->assertSame(502, $response->status());
+        $this->assertStringNotContainsString('ghp_secret', wp_json_encode_safe($response->data()));
+    }
+}
+
+namespace Deployward\Tests\Unit\Http;
+
+if (! function_exists('Deployward\\Tests\\Unit\\Http\\wp_json_encode_safe')) {
+    function wp_json_encode_safe($data): string
+    {
+        return json_encode($data);
+    }
 }
