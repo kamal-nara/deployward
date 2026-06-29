@@ -1,0 +1,850 @@
+/* =============================================================================
+   Deployward Admin UI
+   All rules scoped under #deployward-app to prevent leaking into wp-admin.
+   ============================================================================= */
+
+/* ---------------------------------------------------------------------------
+   1. Design tokens (light mode)
+   --------------------------------------------------------------------------- */
+
+#deployward-app {
+  --dw-accent:      #3858e9;
+  --dw-accent-dark: #2d48c8;
+  --dw-accent-soft: rgba(56, 88, 233, 0.12);
+
+  --dw-bg:     #f0f0f1;
+  --dw-card:   #ffffff;
+  --dw-border: #dcdcde;
+  --dw-text:   #1d2327;
+  --dw-muted:  #646970;
+
+  --dw-ok:      #00a32a;
+  --dw-ok-bg:   #edfaef;
+  --dw-warn:    #dba617;
+  --dw-warn-bg: #fef9ec;
+  --dw-danger:  #d63638;
+  --dw-danger-bg: #fdf2f2;
+
+  --dw-radius: 10px;
+  --dw-shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 4px 12px rgba(0, 0, 0, 0.06);
+  --dw-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.07);
+
+  --dw-space-xs:  4px;
+  --dw-space-sm:  8px;
+  --dw-space-md:  16px;
+  --dw-space-lg:  24px;
+  --dw-space-xl:  36px;
+
+  --dw-transition: 150ms ease;
+}
+
+/* ---------------------------------------------------------------------------
+   2. Dark mode tokens
+   --------------------------------------------------------------------------- */
+
+@media (prefers-color-scheme: dark) {
+  #deployward-app {
+    --dw-bg:     #1d2327;
+    --dw-card:   #2c3338;
+    --dw-border: #3c434a;
+    --dw-text:   #f0f0f1;
+    --dw-muted:  #a7aaad;
+
+    --dw-ok-bg:     rgba(0, 163, 42, 0.18);
+    --dw-warn-bg:   rgba(219, 166, 23, 0.18);
+    --dw-danger-bg: rgba(214, 54, 56, 0.18);
+
+    --dw-shadow:    0 1px 3px rgba(0, 0, 0, 0.3), 0 4px 12px rgba(0, 0, 0, 0.25);
+    --dw-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.25);
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   3. Base / reset
+   --------------------------------------------------------------------------- */
+
+#deployward-app {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+               Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--dw-text);
+  background: var(--dw-bg);
+  padding: var(--dw-space-lg);
+  box-sizing: border-box;
+}
+
+#deployward-app *,
+#deployward-app *::before,
+#deployward-app *::after {
+  box-sizing: inherit;
+}
+
+#deployward-app h2,
+#deployward-app h3,
+#deployward-app h4 {
+  margin: 0 0 var(--dw-space-sm);
+  line-height: 1.3;
+  color: var(--dw-text);
+}
+
+#deployward-app h2 { font-size: 1.3em; font-weight: 600; }
+#deployward-app h3 { font-size: 1.1em; font-weight: 600; }
+#deployward-app h4 { font-size: 0.95em; font-weight: 600; }
+
+#deployward-app p {
+  margin: 0 0 var(--dw-space-md);
+  color: var(--dw-muted);
+}
+
+#deployward-app a {
+  color: var(--dw-accent);
+  text-decoration: none;
+}
+
+#deployward-app a:hover {
+  text-decoration: underline;
+}
+
+/* ---------------------------------------------------------------------------
+   4. Tab bar
+   --------------------------------------------------------------------------- */
+
+.dw-tabs {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  background: var(--dw-card);
+  border: 1px solid var(--dw-border);
+  border-radius: var(--dw-radius);
+  box-shadow: var(--dw-shadow-sm);
+  margin-bottom: var(--dw-space-lg);
+  padding: 0 var(--dw-space-sm);
+  position: sticky;
+  top: 32px;
+  z-index: 100;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.dw-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.dw-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--dw-space-xs);
+  padding: var(--dw-space-md) var(--dw-space-lg);
+  font-size: 0.9em;
+  font-weight: 500;
+  color: var(--dw-muted);
+  background: transparent;
+  border: none;
+  border-bottom: 3px solid transparent;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color var(--dw-transition), border-color var(--dw-transition);
+  outline: none;
+  text-decoration: none;
+}
+
+.dw-tab:hover {
+  color: var(--dw-text);
+}
+
+.dw-tab.is-active {
+  color: var(--dw-accent);
+  border-bottom-color: var(--dw-accent);
+  font-weight: 600;
+}
+
+.dw-tab:focus-visible {
+  outline: 2px solid var(--dw-accent);
+  outline-offset: -2px;
+  border-radius: 4px;
+}
+
+/* ---------------------------------------------------------------------------
+   5. Cards
+   --------------------------------------------------------------------------- */
+
+.dw-card {
+  background: var(--dw-card);
+  border: 1px solid var(--dw-border);
+  border-radius: var(--dw-radius);
+  box-shadow: var(--dw-shadow);
+  padding: var(--dw-space-lg);
+}
+
+.dw-card + .dw-card {
+  margin-top: var(--dw-space-md);
+}
+
+.dw-card__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--dw-space-md);
+  margin-bottom: var(--dw-space-sm);
+}
+
+.dw-card__title {
+  font-size: 1em;
+  font-weight: 600;
+  color: var(--dw-text);
+  margin: 0;
+}
+
+/* ---------------------------------------------------------------------------
+   6. Deployments list
+   --------------------------------------------------------------------------- */
+
+.dw-deployments {
+  display: grid;
+  gap: var(--dw-space-md);
+}
+
+.dw-deployment {
+  background: var(--dw-card);
+  border: 1px solid var(--dw-border);
+  border-radius: var(--dw-radius);
+  box-shadow: var(--dw-shadow);
+  padding: var(--dw-space-lg);
+  transition: box-shadow var(--dw-transition);
+}
+
+.dw-deployment:hover {
+  box-shadow: var(--dw-shadow), 0 0 0 1px var(--dw-border);
+}
+
+.dw-deployment__head {
+  display: flex;
+  align-items: center;
+  gap: var(--dw-space-sm);
+  flex-wrap: wrap;
+  margin-bottom: var(--dw-space-xs);
+}
+
+.dw-deployment__repo {
+  font-size: 1em;
+  font-weight: 600;
+  color: var(--dw-text);
+  margin: 0;
+}
+
+.dw-deployment__meta {
+  font-size: 0.82em;
+  color: var(--dw-muted);
+  margin: 0 0 var(--dw-space-md);
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+               "Liberation Mono", monospace;
+}
+
+.dw-deployment__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--dw-space-sm);
+  margin-top: var(--dw-space-md);
+  padding-top: var(--dw-space-md);
+  border-top: 1px solid var(--dw-border);
+}
+
+.dw-deployment__time {
+  font-size: 0.82em;
+  color: var(--dw-muted);
+}
+
+.dw-deployment__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--dw-space-sm);
+  flex-wrap: wrap;
+}
+
+/* ---------------------------------------------------------------------------
+   7. Status pills
+   --------------------------------------------------------------------------- */
+
+.dw-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--dw-space-xs);
+  padding: 2px 10px;
+  border-radius: 20px;
+  font-size: 0.8em;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+.dw-pill.is-ok {
+  color: var(--dw-ok);
+  background: var(--dw-ok-bg);
+}
+
+.dw-pill.is-failed {
+  color: var(--dw-danger);
+  background: var(--dw-danger-bg);
+}
+
+.dw-pill.is-deploying {
+  color: var(--dw-warn);
+  background: var(--dw-warn-bg);
+}
+
+.dw-pill.is-never {
+  color: var(--dw-muted);
+  background: var(--dw-bg);
+  border: 1px solid var(--dw-border);
+}
+
+/* Three-dot pulse for deploying state */
+.dw-pill.is-deploying::after {
+  content: "";
+  display: inline-block;
+  width: 18px;
+  height: 6px;
+  background-image:
+    radial-gradient(circle, currentColor 2px, transparent 2px),
+    radial-gradient(circle, currentColor 2px, transparent 2px),
+    radial-gradient(circle, currentColor 2px, transparent 2px);
+  background-size: 6px 6px;
+  background-position: 0 0, 6px 0, 12px 0;
+  background-repeat: no-repeat;
+  animation: dw-dot-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes dw-dot-pulse {
+  0%, 80%, 100% { opacity: 0.3; }
+  40%           { opacity: 1; }
+}
+
+/* ---------------------------------------------------------------------------
+   8. Buttons
+   --------------------------------------------------------------------------- */
+
+.dw-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--dw-space-xs);
+  padding: 7px var(--dw-space-md);
+  font-size: 0.9em;
+  font-weight: 500;
+  line-height: 1.4;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: background var(--dw-transition), border-color var(--dw-transition),
+              color var(--dw-transition), box-shadow var(--dw-transition);
+  outline: none;
+  text-decoration: none;
+  white-space: nowrap;
+  background: var(--dw-bg);
+  color: var(--dw-text);
+  border-color: var(--dw-border);
+}
+
+.dw-btn:hover {
+  background: var(--dw-border);
+}
+
+.dw-btn:focus-visible {
+  outline: 2px solid var(--dw-accent);
+  outline-offset: 2px;
+}
+
+.dw-btn--primary {
+  background: var(--dw-accent);
+  color: #ffffff;
+  border-color: var(--dw-accent);
+}
+
+.dw-btn--primary:hover {
+  background: var(--dw-accent-dark);
+  border-color: var(--dw-accent-dark);
+}
+
+.dw-btn--ghost {
+  background: transparent;
+  color: var(--dw-accent);
+  border-color: var(--dw-accent);
+}
+
+.dw-btn--ghost:hover {
+  background: var(--dw-accent-soft);
+}
+
+.dw-btn--danger {
+  background: transparent;
+  color: var(--dw-danger);
+  border-color: var(--dw-danger);
+}
+
+.dw-btn--danger:hover {
+  background: var(--dw-danger-bg);
+}
+
+.dw-btn:disabled,
+.dw-btn[aria-disabled="true"] {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* Inline spinner appended inside button while loading */
+.dw-spin {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: dw-rotate 0.65s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes dw-rotate {
+  to { transform: rotate(360deg); }
+}
+
+/* ---------------------------------------------------------------------------
+   9. Form elements
+   --------------------------------------------------------------------------- */
+
+.dw-form {
+  display: grid;
+  gap: var(--dw-space-lg);
+}
+
+.dw-field {
+  display: grid;
+  gap: var(--dw-space-xs);
+}
+
+.dw-label {
+  font-size: 0.9em;
+  font-weight: 600;
+  color: var(--dw-text);
+}
+
+.dw-label .dw-required {
+  color: var(--dw-danger);
+  margin-left: 2px;
+}
+
+.dw-input,
+.dw-select,
+.dw-textarea {
+  width: 100%;
+  padding: 8px 12px;
+  font-size: 0.9em;
+  font-family: inherit;
+  color: var(--dw-text);
+  background: var(--dw-card);
+  border: 1px solid var(--dw-border);
+  border-radius: 6px;
+  transition: border-color var(--dw-transition), box-shadow var(--dw-transition);
+  outline: none;
+  appearance: none;
+}
+
+.dw-input:hover,
+.dw-select:hover {
+  border-color: var(--dw-muted);
+}
+
+.dw-input:focus,
+.dw-select:focus,
+.dw-textarea:focus {
+  border-color: var(--dw-accent);
+  box-shadow: 0 0 0 2px var(--dw-accent-soft);
+}
+
+.dw-select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23646970'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 32px;
+}
+
+/* Segmented control (public / private) */
+.dw-segmented {
+  display: inline-flex;
+  border: 1px solid var(--dw-border);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--dw-bg);
+}
+
+.dw-segmented__option {
+  display: none;
+}
+
+.dw-segmented__label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--dw-space-xs);
+  padding: 7px var(--dw-space-md);
+  font-size: 0.9em;
+  font-weight: 500;
+  color: var(--dw-muted);
+  cursor: pointer;
+  transition: background var(--dw-transition), color var(--dw-transition);
+  user-select: none;
+  border-right: 1px solid var(--dw-border);
+}
+
+.dw-segmented__label:last-child {
+  border-right: none;
+}
+
+.dw-segmented__option:checked + .dw-segmented__label {
+  background: var(--dw-accent);
+  color: #ffffff;
+}
+
+.dw-segmented__option:focus-visible + .dw-segmented__label {
+  outline: 2px solid var(--dw-accent);
+  outline-offset: 2px;
+}
+
+/* Token row: only visible when form has .is-private */
+#deployward-app form:not(.is-private) .dw-token-row {
+  display: none;
+}
+
+/* Branch row: action group with a select and a fallback input side by side */
+.dw-branch-row {
+  display: flex;
+  gap: var(--dw-space-sm);
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+.dw-branch-row .dw-select,
+.dw-branch-row .dw-input {
+  flex: 1 1 180px;
+  min-width: 0;
+}
+
+.dw-help {
+  font-size: 0.82em;
+  color: var(--dw-muted);
+  margin-top: var(--dw-space-xs);
+}
+
+.dw-error {
+  font-size: 0.82em;
+  color: var(--dw-danger);
+  font-weight: 500;
+  margin-top: var(--dw-space-xs);
+}
+
+.dw-form__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--dw-space-sm);
+  padding-top: var(--dw-space-sm);
+  border-top: 1px solid var(--dw-border);
+  flex-wrap: wrap;
+}
+
+/* ---------------------------------------------------------------------------
+   10. Toast / notice area
+   --------------------------------------------------------------------------- */
+
+.dw-toast {
+  display: flex;
+  align-items: center;
+  gap: var(--dw-space-sm);
+  padding: var(--dw-space-sm) var(--dw-space-md);
+  border-radius: 6px;
+  font-size: 0.9em;
+  font-weight: 500;
+  border-left: 4px solid transparent;
+  margin-bottom: var(--dw-space-md);
+  animation: dw-toast-in 200ms ease;
+}
+
+@keyframes dw-toast-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.dw-toast.is-ok {
+  background: var(--dw-ok-bg);
+  color: var(--dw-ok);
+  border-left-color: var(--dw-ok);
+}
+
+.dw-toast.is-error {
+  background: var(--dw-danger-bg);
+  color: var(--dw-danger);
+  border-left-color: var(--dw-danger);
+}
+
+.dw-toast__close {
+  margin-left: auto;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: inherit;
+  opacity: 0.7;
+  padding: 0 4px;
+  font-size: 1.1em;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.dw-toast__close:hover {
+  opacity: 1;
+}
+
+/* ---------------------------------------------------------------------------
+   11. Getting Started panel
+   --------------------------------------------------------------------------- */
+
+.dw-getting-started {
+  display: grid;
+  gap: var(--dw-space-xl);
+}
+
+.dw-flow-title {
+  font-size: 1.05em;
+  font-weight: 600;
+  color: var(--dw-text);
+  margin: 0 0 var(--dw-space-md);
+  padding-bottom: var(--dw-space-sm);
+  border-bottom: 2px solid var(--dw-border);
+}
+
+.dw-steps {
+  display: grid;
+  gap: var(--dw-space-md);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.dw-step {
+  display: flex;
+  gap: var(--dw-space-md);
+  background: var(--dw-card);
+  border: 1px solid var(--dw-border);
+  border-radius: var(--dw-radius);
+  box-shadow: var(--dw-shadow-sm);
+  padding: var(--dw-space-md) var(--dw-space-lg);
+  align-items: flex-start;
+}
+
+.dw-step__number {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--dw-accent);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.85em;
+  font-weight: 700;
+  line-height: 1;
+  margin-top: 2px;
+}
+
+.dw-step__body {
+  flex: 1;
+  min-width: 0;
+}
+
+.dw-step__title {
+  font-weight: 600;
+  color: var(--dw-text);
+  margin: 0 0 var(--dw-space-xs);
+}
+
+.dw-step__desc {
+  font-size: 0.88em;
+  color: var(--dw-muted);
+  margin: 0;
+}
+
+/* ---------------------------------------------------------------------------
+   12. Activity log
+   --------------------------------------------------------------------------- */
+
+.dw-log {
+  display: grid;
+  gap: var(--dw-space-sm);
+}
+
+.dw-log__row {
+  display: flex;
+  align-items: center;
+  gap: var(--dw-space-md);
+  padding: var(--dw-space-sm) var(--dw-space-md);
+  background: var(--dw-card);
+  border: 1px solid var(--dw-border);
+  border-radius: 6px;
+  font-size: 0.88em;
+  flex-wrap: wrap;
+}
+
+.dw-log__time {
+  color: var(--dw-muted);
+  white-space: nowrap;
+  min-width: 140px;
+}
+
+.dw-log__sha {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+               "Liberation Mono", monospace;
+  color: var(--dw-muted);
+  font-size: 0.95em;
+}
+
+.dw-log__message {
+  flex: 1;
+  color: var(--dw-text);
+  min-width: 0;
+}
+
+.dw-log__pager {
+  display: flex;
+  align-items: center;
+  gap: var(--dw-space-sm);
+  justify-content: flex-end;
+  margin-top: var(--dw-space-md);
+}
+
+.dw-log__pager-label {
+  font-size: 0.85em;
+  color: var(--dw-muted);
+}
+
+/* ---------------------------------------------------------------------------
+   13. Empty state
+   --------------------------------------------------------------------------- */
+
+.dw-empty {
+  text-align: center;
+  padding: var(--dw-space-xl) var(--dw-space-lg);
+  color: var(--dw-muted);
+  background: var(--dw-card);
+  border: 1px dashed var(--dw-border);
+  border-radius: var(--dw-radius);
+}
+
+.dw-empty__icon {
+  font-size: 2.5em;
+  margin-bottom: var(--dw-space-sm);
+  display: block;
+}
+
+.dw-empty__title {
+  font-weight: 600;
+  color: var(--dw-text);
+  margin: 0 0 var(--dw-space-xs);
+}
+
+.dw-empty__desc {
+  font-size: 0.9em;
+  margin: 0;
+}
+
+/* ---------------------------------------------------------------------------
+   14. Loading skeleton
+   --------------------------------------------------------------------------- */
+
+.dw-skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--dw-border) 25%,
+    var(--dw-bg) 50%,
+    var(--dw-border) 75%
+  );
+  background-size: 400% 100%;
+  animation: dw-shimmer 1.4s ease infinite;
+  border-radius: 4px;
+  height: 1em;
+}
+
+@keyframes dw-shimmer {
+  0%   { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+/* ---------------------------------------------------------------------------
+   15. Responsive layout
+   --------------------------------------------------------------------------- */
+
+@media (max-width: 782px) {
+  #deployward-app {
+    padding: var(--dw-space-md);
+  }
+
+  .dw-tabs {
+    top: 0;
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+    margin-left: calc(-1 * var(--dw-space-md));
+    margin-right: calc(-1 * var(--dw-space-md));
+    margin-bottom: var(--dw-space-md);
+  }
+
+  .dw-tab {
+    padding: var(--dw-space-sm) var(--dw-space-md);
+    font-size: 0.85em;
+  }
+
+  .dw-deployments {
+    grid-template-columns: 1fr;
+  }
+
+  .dw-deployment__footer {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .dw-deployment__actions {
+    width: 100%;
+  }
+
+  .dw-deployment__actions .dw-btn {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+
+  .dw-form__actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .dw-form__actions .dw-btn {
+    justify-content: center;
+  }
+
+  .dw-branch-row {
+    flex-direction: column;
+  }
+
+  .dw-log__row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--dw-space-xs);
+  }
+
+  .dw-log__time {
+    min-width: 0;
+  }
+
+  .dw-step {
+    flex-direction: column;
+    gap: var(--dw-space-sm);
+  }
+}
