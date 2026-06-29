@@ -117,8 +117,11 @@ final class Deployer implements DeployerInterface
         $targetDir = rtrim($root, '/') . '/' . $deployment->targetSlug();
 
         $this->maintenance->enable();
-        $restore = $this->backups->restoreLatest($deployment->targetSlug(), $targetDir);
-        $this->maintenance->disable();
+        try {
+            $restore = $this->backups->restoreLatest($deployment->targetSlug(), $targetDir);
+        } finally {
+            $this->maintenance->disable();
+        }
 
         return $this->finish($deployment, $trigger, $restore, '');
     }
@@ -157,19 +160,20 @@ final class Deployer implements DeployerInterface
         $targetDir = rtrim($root, '/') . '/' . $deployment->targetSlug();
 
         $this->maintenance->enable();
-        $backup = $this->backups->backup($targetDir, $deployment->targetSlug(), $sha);
-        if (! $backup->isOk() && ! $backup->isSkipped()) {
-            $this->maintenance->disable();
-            return $backup;
-        }
-        if (! @rename($newDir, $targetDir)) {
-            if ($backup->isOk()) {
-                $this->backups->restoreLatest($deployment->targetSlug(), $targetDir);
+        try {
+            $backup = $this->backups->backup($targetDir, $deployment->targetSlug(), $sha);
+            if (! $backup->isOk() && ! $backup->isSkipped()) {
+                return $backup;
             }
+            if (! @rename($newDir, $targetDir)) {
+                if ($backup->isOk() && ! $backup->isSkipped()) {
+                    $this->backups->restoreLatest($deployment->targetSlug(), $targetDir);
+                }
+                return Result::fail('Could not move new version into place');
+            }
+        } finally {
             $this->maintenance->disable();
-            return Result::fail('Could not move new version into place');
         }
-        $this->maintenance->disable();
 
         $health = $this->health->check($this->healthUrl);
         if (! $health->isOk()) {
