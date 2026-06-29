@@ -53,4 +53,28 @@ final class DeploymentTest extends TestCase
         $this->assertSame('deadbeef', $next->lastDeployedSha());
         $this->assertNotSame($deployment, $next);
     }
+
+    public function test_rejects_unknown_visibility(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        Deployment::fromArray($this->validData(array('visibility' => 'secret')));
+    }
+
+    public function test_rejects_missing_required_field(): void
+    {
+        $data = $this->validData();
+        unset($data['branch']);
+        $this->expectException(\InvalidArgumentException::class);
+        Deployment::fromArray($data);
+    }
+
+    public function test_with_token_returns_new_instance(): void
+    {
+        $deployment = Deployment::fromArray($this->validData());
+        $next = $deployment->withToken('ghp_new');
+
+        $this->assertSame('ghp_x', $deployment->token());
+        $this->assertSame('ghp_new', $next->token());
+        $this->assertNotSame($deployment, $next);
+    }
 }

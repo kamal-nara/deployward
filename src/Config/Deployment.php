@@ -51,7 +51,7 @@ final class Deployment
     public static function fromArray(array $data): self
     {
         foreach (array('id', 'repo', 'branch', 'visibility', 'target_type', 'target_slug') as $key) {
-            if (empty($data[$key])) {
+            if (! isset($data[$key]) || $data[$key] === '') {
                 throw new \InvalidArgumentException('Missing required field: ' . $key);
             }
         }
@@ -64,7 +64,7 @@ final class Deployment
         if (! in_array($data['target_type'], self::TYPES, true)) {
             throw new \InvalidArgumentException('invalid target_type');
         }
-        if (! preg_match('#^[a-z0-9][a-z0-9-]*$#', $data['target_slug'])) {
+        if (! preg_match('#^[A-Za-z0-9][A-Za-z0-9_-]*$#', $data['target_slug'])) {
             throw new \InvalidArgumentException('invalid target_slug');
         }
 
