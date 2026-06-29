@@ -6,10 +6,12 @@ use Brain\Monkey;
 use Brain\Monkey\Functions;
 use Deployward\Log\DeployLog;
 use Mockery;
+use Mockery\Adapter\Phpunit\MockeryPHPUnitIntegration;
 use PHPUnit\Framework\TestCase;
 
 final class DeployLogTest extends TestCase
 {
+    use MockeryPHPUnitIntegration;
     protected function setUp(): void
     {
         parent::setUp();
