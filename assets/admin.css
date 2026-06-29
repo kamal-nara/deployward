@@ -473,6 +473,7 @@
 /* Segmented control (public / private) */
 .dw-segmented {
   display: inline-flex;
+  position: relative;
   border: 1px solid var(--dw-border);
   border-radius: 6px;
   overflow: hidden;
@@ -480,7 +481,16 @@
 }
 
 .dw-segmented__option {
-  display: none;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
 }
 
 .dw-segmented__label {

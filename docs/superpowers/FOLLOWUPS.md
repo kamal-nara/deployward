@@ -45,3 +45,14 @@ or alongside Plan 2/3.
   the spec section "Why maintenance mode is exited before the health check". The brief
   exposure window is inherent to in-place deploys and is the target of the future
   build/atomic-switch mode.
+
+## Plan 3 (admin UI) follow-ups
+- listBranches WP_Error/non-array-body tests.
+- Assert create-path webhook secret is set and non-empty.
+- Deploy 502 body: assert {status:failed} in response data.
+- Log page=2 offset test (offset = 20 when page = 2).
+- Lazy-construct REST controller inside rest_api_init to avoid eager engine graph per request.
+- admin.js pill prevClass cleanup: strip modifier classes before storing, not the full className.
+- buildToastEl vs inline-error surface: decide one pattern for form-level errors.
+- Extract repeated 'public' literal into a named constant or config value.
+- Container builds its own DeploymentRepository (stateless, fine as-is).

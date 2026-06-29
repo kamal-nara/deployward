@@ -191,6 +191,28 @@ final class RestControllerTest extends TestCase
         $this->assertSame(502, $response->status());
         $this->assertStringNotContainsString('ghp_secret', wp_json_encode_safe($response->data()));
     }
+
+    public function test_rollback_maps_ok_result_to_200(): void
+    {
+        $repo = Mockery::mock(DeploymentRepositoryInterface::class);
+        $repo->shouldReceive('find')->with('dw_1')->andReturn($this->deployment());
+        $deployer = Mockery::mock(DeployerInterface::class);
+        $deployer->shouldReceive('rollback')->once()
+            ->with(Mockery::type(Deployment::class), 'manual-rollback')
+            ->andReturn(\Deployward\Support\Result::ok('/path/to/target', 'Rolled back dw_1'));
+
+        $response = $this->controller($repo, $deployer)->rollback('dw_1');
+
+        $this->assertSame(200, $response->status());
+    }
+
+    public function test_rollback_unknown_id_404(): void
+    {
+        $repo = Mockery::mock(DeploymentRepositoryInterface::class);
+        $repo->shouldReceive('find')->with('nope')->andReturn(null);
+
+        $this->assertSame(404, $this->controller($repo)->rollback('nope')->status());
+    }
 }
 
 namespace Deployward\Tests\Unit\Http;
