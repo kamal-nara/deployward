@@ -23,4 +23,5 @@ require_once DEPLOYWARD_PATH . 'src/Autoloader.php';
 \Deployward\Autoloader::register(DEPLOYWARD_PATH . 'src');
 
 register_activation_hook(__FILE__, array('\\Deployward\\Plugin', 'activate'));
+register_deactivation_hook(__FILE__, array('\\Deployward\\Plugin', 'deactivate'));
 add_action('plugins_loaded', array('\\Deployward\\Plugin', 'boot'));
