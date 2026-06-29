@@ -1,0 +1,19 @@
+{
+    "name": "kamal-ahmed/deployward",
+    "description": "Safely auto-deploys plugins and themes from GitHub into WordPress.",
+    "type": "wordpress-plugin",
+    "license": "GPL-2.0-or-later",
+    "authors": [{ "name": "Kamal Ahmed" }],
+    "require": { "php": ">=7.4" },
+    "require-dev": {
+        "phpunit/phpunit": "^10.5",
+        "brain/monkey": "^2.6",
+        "mockery/mockery": "^1.6"
+    },
+    "autoload": { "psr-4": { "Deployward\\": "src/" } },
+    "autoload-dev": { "psr-4": { "Deployward\\Tests\\": "tests/" } },
+    "config": {
+        "sort-packages": true,
+        "platform": { "php": "8.2.30" }
+    }
+}
