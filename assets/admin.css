@@ -1115,10 +1115,6 @@
   flex-shrink: 0;
 }
 
-.dw-btn .dw-btn-icon-text {
-  margin-left: 4px;
-}
-
 .dw-deployment__actions .dw-btn--icon:first-of-type {
   margin-left: auto;
 }
