@@ -88,10 +88,31 @@ final class DeploymentTest extends TestCase
         $this->assertSame('kamalahmed/licensekit', Deployment::normalizeRepo('kamalahmed/licensekit'));
     }
 
+    public function test_normalize_repo_extracts_owner_repo_from_deep_urls(): void
+    {
+        $this->assertSame('kamalahmed/licensekit', Deployment::normalizeRepo('https://github.com/kamalahmed/licensekit/tree/main'));
+        $this->assertSame('kamalahmed/licensekit', Deployment::normalizeRepo('https://github.com/kamalahmed/licensekit/blob/main/readme.md'));
+        $this->assertSame('kamalahmed/licensekit', Deployment::normalizeRepo('https://github.com/kamalahmed/licensekit?tab=readme'));
+    }
+
     public function test_from_array_accepts_full_github_url(): void
     {
         $d = Deployment::fromArray($this->validData(array('repo' => 'https://github.com/kamalahmed/licensekit')));
         $this->assertSame('kamalahmed/licensekit', $d->repo());
+    }
+
+    public function test_from_array_accepts_ssh_git_url(): void
+    {
+        $d = Deployment::fromArray($this->validData(array('repo' => 'git@github.com:kamalahmed/licensekit.git')));
+        $this->assertSame('kamalahmed/licensekit', $d->repo());
+    }
+
+    public function test_from_array_derives_hyphenated_slug_from_dotted_repo_name(): void
+    {
+        $data = $this->validData(array('repo' => 'kamalahmed/my.plugin'));
+        unset($data['target_slug']);
+        $d = Deployment::fromArray($data);
+        $this->assertSame('my-plugin', $d->targetSlug());
     }
 
     public function test_from_array_derives_slug_when_omitted(): void

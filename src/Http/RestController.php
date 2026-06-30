@@ -139,6 +139,9 @@ final class RestController
     public function branches(array $params): ApiResponse
     {
         $repo = \Deployward\Config\Deployment::normalizeRepo(isset($params['repo']) ? (string) $params['repo'] : '');
+        if (! preg_match('#^[\w.-]+/[\w.-]+$#', $repo)) {
+            return ApiResponse::error('repo must be a GitHub owner/repo or URL', 422);
+        }
         $visibility = isset($params['visibility']) ? (string) $params['visibility'] : 'public';
         $token = ($visibility === 'private' && isset($params['token'])) ? (string) $params['token'] : null;
         if ($token === '') {

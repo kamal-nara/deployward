@@ -56,8 +56,16 @@ final class Deployment
         }
         $repo = preg_replace('#^https?://#i', '', $repo);
         $repo = preg_replace('#^(www\.)?github\.com/#i', '', $repo);
+        $repo = preg_replace('~[?#].*$~', '', $repo);
         $repo = preg_replace('#\.git$#i', '', $repo);
-        return trim($repo, '/');
+        $repo = trim($repo, '/');
+        $parts = array_values(array_filter(explode('/', $repo), function ($segment) {
+            return $segment !== '';
+        }));
+        if (count($parts) >= 2) {
+            return $parts[0] . '/' . $parts[1];
+        }
+        return $repo;
     }
 
     private static function deriveSlug(string $repo): string

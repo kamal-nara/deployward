@@ -266,6 +266,15 @@ final class RestControllerTest extends TestCase
         $this->assertSame(200, $response->status());
     }
 
+    public function test_branches_rejects_invalid_repo_with_422_without_calling_github(): void
+    {
+        $github = Mockery::mock(GitHubClientInterface::class);
+        $github->shouldNotReceive('listBranches');
+        $response = $this->controller(Mockery::mock(DeploymentRepositoryInterface::class), null, null, $github)
+            ->branches(array('repo' => 'notarepo', 'visibility' => 'public'));
+        $this->assertSame(422, $response->status());
+    }
+
     public function test_save_with_url_and_empty_slug_normalizes_and_derives(): void
     {
         $repo = Mockery::mock(DeploymentRepositoryInterface::class);

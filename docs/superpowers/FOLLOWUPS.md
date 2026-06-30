@@ -66,3 +66,14 @@ or alongside Plan 2/3.
 - RestRoutesTest: tighten the webhook permission assertion to === '__return_true'; add a test that the webhook-info route is canManage-gated.
 - admin.js webhook panel: associate each row <label> with its <input> (for/id) for screen readers; verify .dw-copy padding vs dw-btn in the browser.
 - Webhook 202 response 'sha' echoes the pushed payload.after, not necessarily the SHA actually deployed (Deployer re-resolves head async). Cosmetic response field; document it.
+
+## Post-v1 fix follow-ups (repo-URL normalize + optional slug)
+
+- DONE (commit 9f0ff13): accept full GitHub URLs (normalize to owner/repo) + optional slug.
+- DONE (follow-up): `normalizeRepo()` now extracts owner/repo from deep URLs
+  (`/tree/<branch>`, `/blob/...`, `?query`), and `branches()` returns a 422 with a clear
+  message for input that is not owner/repo (instead of a generic 502 from GitHub).
+- `deriveSlug()` returns a clear "invalid target_slug" error for pathological repo names
+  (e.g. `___`, `--`) instead of a usable slug. Acceptable fail-safe; revisit only if real.
+- Derived slugs preserve uppercase (e.g. `My-Plugin`). WP dirs are usually lowercase;
+  consider lowercasing the derived slug if it ever causes a mismatch. Low priority.
