@@ -6,6 +6,7 @@ use Deployward\Admin\AdminPage;
 use Deployward\Cli\DeployCommand;
 use Deployward\Cron\CronPoller;
 use Deployward\Deploy\DeployScheduler;
+use Deployward\Http\PreferencesController;
 use Deployward\Http\RestController;
 use Deployward\Http\RestRoutes;
 use Deployward\Http\WebhookController;
@@ -61,7 +62,8 @@ final class Plugin
                 $container->log(),
                 $container->github()
             ),
-            new WebhookController($container->repository(), new SignatureVerifier(), $scheduler)
+            new WebhookController($container->repository(), new SignatureVerifier(), $scheduler),
+            new PreferencesController()
         );
         add_action('rest_api_init', array($routes, 'register'));
 

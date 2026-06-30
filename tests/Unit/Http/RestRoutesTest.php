@@ -50,7 +50,8 @@ final class RestRoutesTest extends TestCase
     {
         $routes = new RestRoutes(
             $this->makeRestController(),
-            $this->makeWebhookController()
+            $this->makeWebhookController(),
+            new \Deployward\Http\PreferencesController()
         );
         $wp = $routes->respond(ApiResponse::error('nope', 404));
 
@@ -62,7 +63,8 @@ final class RestRoutesTest extends TestCase
     {
         $routes = new RestRoutes(
             $this->makeRestController(),
-            $this->makeWebhookController()
+            $this->makeWebhookController(),
+            new \Deployward\Http\PreferencesController()
         );
 
         $this->assertInstanceOf(RestRoutes::class, $routes);
@@ -78,7 +80,8 @@ final class RestRoutesTest extends TestCase
 
         $routes = new RestRoutes(
             $this->makeRestController(),
-            $this->makeWebhookController()
+            $this->makeWebhookController(),
+            new \Deployward\Http\PreferencesController()
         );
         $routes->register();
 

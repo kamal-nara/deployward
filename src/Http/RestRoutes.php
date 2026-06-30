@@ -12,10 +12,14 @@ final class RestRoutes
     /** @var WebhookController */
     private $webhook;
 
-    public function __construct(RestController $controller, WebhookController $webhook)
+    /** @var PreferencesController */
+    private $preferences;
+
+    public function __construct(RestController $controller, WebhookController $webhook, PreferencesController $preferences)
     {
         $this->controller = $controller;
         $this->webhook = $webhook;
+        $this->preferences = $preferences;
     }
 
     public static function canManage(): bool
@@ -112,6 +116,23 @@ final class RestRoutes
                     $request->get_header('x-github-event')
                 ));
             },
+        ));
+
+        register_rest_route(self::NAMESPACE, '/preferences', array(
+            array(
+                'methods' => 'GET',
+                'permission_callback' => $permission,
+                'callback' => function () {
+                    return $this->respond($this->preferences->get());
+                },
+            ),
+            array(
+                'methods' => 'POST',
+                'permission_callback' => $permission,
+                'callback' => function ($request) {
+                    return $this->respond($this->preferences->save($this->params($request)));
+                },
+            ),
         ));
     }
 

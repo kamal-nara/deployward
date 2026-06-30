@@ -65,7 +65,15 @@
   }
 
   DeploywardApp.prototype.init = function () {
+    this.theme = (this.el.dataset.theme === 'dark') ? 'dark' : 'light';
+    if (this.theme === 'dark') {
+      this.el.classList.add('dw-theme-dark');
+    }
+
     clearEl(this.el);
+    const header = buildHeader(this);
+    this.el.appendChild(header);
+
     this.toastArea = el('div');
     this.el.appendChild(this.toastArea);
 
@@ -136,6 +144,107 @@
   }
 
   /* -------------------------------------------------------------------------
+     App header with theme toggle
+     ---------------------------------------------------------------------- */
+
+  function buildHeader(app) {
+    const header = el('div');
+    header.className = 'dw-header';
+
+    const brand = el('div');
+    brand.className = 'dw-header__brand';
+
+    const logo = el('span');
+    logo.className = 'dw-header__logo';
+    const logoIcon = el('span');
+    logoIcon.className = 'dashicons dashicons-update';
+    logoIcon.setAttribute('aria-hidden', 'true');
+    logo.appendChild(logoIcon);
+    brand.appendChild(logo);
+
+    const brandText = el('div');
+    const titleEl = el('div');
+    titleEl.className = 'dw-header__title';
+    titleEl.textContent = 'Deployward';
+    const subEl = el('div');
+    subEl.className = 'dw-header__sub';
+    subEl.textContent = 'Deploy plugins and themes from GitHub on push';
+    brandText.appendChild(titleEl);
+    brandText.appendChild(subEl);
+    brand.appendChild(brandText);
+
+    header.appendChild(brand);
+
+    const toggle = buildThemeToggle(app);
+    header.appendChild(toggle);
+
+    return header;
+  }
+
+  function buildThemeToggle(app) {
+    const btn = el('button');
+    btn.type = 'button';
+    btn.className = 'dw-theme-toggle';
+    updateThemeToggle(btn, app.theme);
+
+    btn.addEventListener('click', function () {
+      const newTheme = app.theme === 'dark' ? 'light' : 'dark';
+      const prevTheme = app.theme;
+
+      app.theme = newTheme;
+      if (newTheme === 'dark') {
+        app.el.classList.add('dw-theme-dark');
+      } else {
+        app.el.classList.remove('dw-theme-dark');
+      }
+      updateThemeToggle(btn, newTheme);
+
+      app.api('POST', 'preferences', { theme: newTheme }).then(function (res) {
+        if (res.status < 200 || res.status >= 300) {
+          app.theme = prevTheme;
+          if (prevTheme === 'dark') {
+            app.el.classList.add('dw-theme-dark');
+          } else {
+            app.el.classList.remove('dw-theme-dark');
+          }
+          updateThemeToggle(btn, prevTheme);
+          app.showToast('is-error', 'Could not save theme preference.');
+        }
+      }).catch(function () {
+        app.theme = prevTheme;
+        if (prevTheme === 'dark') {
+          app.el.classList.add('dw-theme-dark');
+        } else {
+          app.el.classList.remove('dw-theme-dark');
+        }
+        updateThemeToggle(btn, prevTheme);
+        app.showToast('is-error', 'Could not save theme preference.');
+      });
+    });
+
+    return btn;
+  }
+
+  function updateThemeToggle(btn, theme) {
+    clearEl(btn);
+    const icon = el('span');
+    const labelSpan = el('span');
+    if (theme === 'dark') {
+      icon.className = 'dashicons dashicons-admin-appearance';
+      icon.setAttribute('aria-hidden', 'true');
+      labelSpan.textContent = 'Light';
+      btn.setAttribute('aria-label', 'Switch to light mode');
+    } else {
+      icon.className = 'dashicons dashicons-admin-appearance';
+      icon.setAttribute('aria-hidden', 'true');
+      labelSpan.textContent = 'Dark';
+      btn.setAttribute('aria-label', 'Switch to dark mode');
+    }
+    btn.appendChild(icon);
+    btn.appendChild(labelSpan);
+  }
+
+  /* -------------------------------------------------------------------------
      Deployments tab
      ---------------------------------------------------------------------- */
 
@@ -163,6 +272,8 @@
         ));
         return;
       }
+      const stats = buildStatsStrip(items);
+      app.panelWrap.insertBefore(stats, panel);
       items.forEach(function (d) {
         panel.appendChild(buildDeploymentCard(app, d));
       });
@@ -170,6 +281,33 @@
       clearEl(panel);
       panel.appendChild(buildToastEl('is-error', 'Network error loading deployments.'));
     });
+  }
+
+  function buildStatsStrip(items) {
+    const strip = el('div');
+    strip.className = 'dw-stats';
+
+    const total = items.length;
+    const deployed = items.filter(function (d) { return d.last_deployed_sha; }).length;
+
+    function buildStat(label, value) {
+      const stat = el('div');
+      stat.className = 'dw-stat';
+      const labelEl = el('span');
+      labelEl.className = 'dw-stat__label';
+      labelEl.textContent = label;
+      const valueEl = el('span');
+      valueEl.className = 'dw-stat__value';
+      valueEl.textContent = String(value);
+      stat.appendChild(labelEl);
+      stat.appendChild(valueEl);
+      return stat;
+    }
+
+    strip.appendChild(buildStat('Deployments', total));
+    strip.appendChild(buildStat('Deployed', deployed));
+
+    return strip;
   }
 
   function buildDeploymentCard(app, d) {
@@ -238,6 +376,10 @@
 
   function buildDeployBtn(app, d, pill) {
     const btn = elBtn('Deploy now', 'dw-btn--primary');
+    const icon = el('span');
+    icon.className = 'dashicons dashicons-controls-play';
+    icon.setAttribute('aria-hidden', 'true');
+    btn.insertBefore(icon, btn.firstChild);
     btn.addEventListener('click', function () {
       runAction(app, btn, pill, function () {
         return app.api('POST', 'deployments/' + d.id + '/deploy', { force: false });
@@ -250,6 +392,10 @@
 
   function buildRollbackBtn(app, d, pill) {
     const btn = elBtn('Rollback', 'dw-btn--danger');
+    const icon = el('span');
+    icon.className = 'dashicons dashicons-undo';
+    icon.setAttribute('aria-hidden', 'true');
+    btn.insertBefore(icon, btn.firstChild);
     btn.addEventListener('click', function () {
       if (!confirm('Roll back ' + d.repo + '@' + d.branch + ' to the previous version?')) { return; }
       runAction(app, btn, pill, function () {
@@ -262,7 +408,7 @@
   }
 
   function buildViewLogBtn(app, d) {
-    const btn = elBtn('View log', 'dw-btn--ghost');
+    const btn = elIconBtn('View log', 'dashicons-media-text', '');
     btn.addEventListener('click', function () {
       app.logTargetId = d.id;
       app.switchTab('activity-log');
@@ -271,7 +417,7 @@
   }
 
   function buildWebhookBtn(app, d, card) {
-    const btn = elBtn('Webhook setup', 'dw-btn--ghost');
+    const btn = elIconBtn('Webhook setup', 'dashicons-admin-links', '');
 
     btn.addEventListener('click', function () {
       const existing = card.querySelector('.dw-webhook');
@@ -389,7 +535,7 @@
   }
 
   function buildEditBtn(app, d) {
-    const btn = elBtn('Edit', '');
+    const btn = elIconBtn('Edit', 'dashicons-edit', '');
     btn.addEventListener('click', function () {
       app.editingDeployment = d;
       app.switchTab('add-deployment');
@@ -398,7 +544,7 @@
   }
 
   function buildDeleteBtn(app, d, card) {
-    const btn = elBtn('Delete', 'dw-btn--danger');
+    const btn = elIconBtn('Delete', 'dashicons-trash', 'dw-btn--danger');
     btn.addEventListener('click', function () {
       if (!confirm('Delete deployment for ' + d.repo + '? This cannot be undone.')) { return; }
       setInFlight(btn, true);
@@ -1094,6 +1240,19 @@
     btn.type = 'button';
     btn.className = 'dw-btn' + (extraClass ? ' ' + extraClass : '');
     btn.textContent = text;
+    return btn;
+  }
+
+  function elIconBtn(label, dashicon, extraClass) {
+    const btn = el('button');
+    btn.type = 'button';
+    btn.className = 'dw-btn dw-btn--icon' + (extraClass ? ' ' + extraClass : '');
+    btn.setAttribute('aria-label', label);
+    btn.setAttribute('title', label);
+    const icon = el('span');
+    icon.className = 'dashicons ' + dashicon;
+    icon.setAttribute('aria-hidden', 'true');
+    btn.appendChild(icon);
     return btn;
   }
 
