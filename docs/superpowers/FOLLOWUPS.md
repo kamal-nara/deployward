@@ -77,3 +77,22 @@ or alongside Plan 2/3.
   (e.g. `___`, `--`) instead of a usable slug. Acceptable fail-safe; revisit only if real.
 - Derived slugs preserve uppercase (e.g. `My-Plugin`). WP dirs are usually lowercase;
   consider lowercasing the derived slug if it ever causes a mismatch. Low priority.
+
+## Field bug: WP Engine cross-filesystem deploy (fixed in 0.2.1)
+- Root cause: extraction happened in get_temp_dir() (local /tmp) and the directory was
+  rename()d into wp-content (NAS mount on WPE); PHP cannot rename directories across
+  filesystems (EXDEV). Fixed: extraction now works under uploads and every directory
+  move goes through DirectoryMover (rename with recursive copy+delete fallback), the
+  same guarantee core's upgrader provides.
+- Remaining hardening (not blocking):
+  - `Plugin::boot()` builds the full Deployer graph on every request via the REST
+    controller wiring. During a non-atomic code update (partial file sync, mid-edit
+    on a live box) a constructor signature mismatch fatals EVERY request. Build the
+    engine lazily (inside rest_api_init callbacks / cron / CLI paths only). This
+    subsumes the earlier "lazy-construct REST controller" item.
+  - DirectoryMover merges into an existing non-empty destination on the copy path.
+    Unreachable in current flows (backup/set-aside always clears the destination
+    first) but worth an explicit guard if the mover is ever reused elsewhere.
+  - Health check hits the home URL only; a fatal confined to wp-admin or a specific
+    template can still pass. Consider an authenticated-less admin-ajax ping as a
+    second probe.
