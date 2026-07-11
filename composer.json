@@ -12,6 +12,10 @@
     },
     "autoload": { "psr-4": { "Deployward\\": "src/" } },
     "autoload-dev": { "psr-4": { "Deployward\\Tests\\": "tests/" } },
+    "scripts": {
+        "test": "phpunit",
+        "zip": "bash bin/build-zip.sh"
+    },
     "config": {
         "sort-packages": true,
         "platform": { "php": "8.2.30" }
