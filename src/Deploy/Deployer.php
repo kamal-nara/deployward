@@ -19,6 +19,8 @@ final class Deployer implements DeployerInterface
     private $validator;
     /** @var BackupManagerInterface */
     private $backups;
+    /** @var DirectoryMoverInterface */
+    private $mover;
     /** @var HealthCheckerInterface */
     private $health;
     /** @var MaintenanceModeInterface */
@@ -45,6 +47,7 @@ final class Deployer implements DeployerInterface
         ExtractorInterface $extractor,
         PayloadValidatorInterface $validator,
         BackupManagerInterface $backups,
+        DirectoryMoverInterface $mover,
         HealthCheckerInterface $health,
         MaintenanceModeInterface $maintenance,
         DeployLogInterface $log,
@@ -60,6 +63,7 @@ final class Deployer implements DeployerInterface
         $this->extractor = $extractor;
         $this->validator = $validator;
         $this->backups = $backups;
+        $this->mover = $mover;
         $this->health = $health;
         $this->maintenance = $maintenance;
         $this->log = $log;
@@ -97,8 +101,10 @@ final class Deployer implements DeployerInterface
         if (! $payload->isOk()) {
             return $this->finish($deployment, $trigger, $payload, $sha);
         }
+        $newDir = (string) $payload->data();
 
-        $swap = $this->swap($deployment, (string) $payload->data(), $sha);
+        $swap = $this->swap($deployment, $newDir, $sha);
+        $this->extractor->cleanup($newDir);
         if ($swap->isOk()) {
             $this->backups->prune($deployment->targetSlug(), $this->keepBackups);
             $this->repository->save($deployment->withLastDeployedSha($sha));
@@ -165,11 +171,16 @@ final class Deployer implements DeployerInterface
             if (! $backup->isOk() && ! $backup->isSkipped()) {
                 return $backup;
             }
-            if (! @rename($newDir, $targetDir)) {
+            $moved = $this->mover->move($newDir, $targetDir);
+            if (! $moved->isOk()) {
+                $suffix = '';
                 if ($backup->isOk() && ! $backup->isSkipped()) {
-                    $this->backups->restoreLatest($deployment->targetSlug(), $targetDir);
+                    $restored = $this->backups->restoreLatest($deployment->targetSlug(), $targetDir);
+                    $suffix = $restored->isOk()
+                        ? '; the previous version was restored'
+                        : '; automatic restore of the previous version ALSO failed (' . $restored->message() . '), manual action required';
                 }
-                return Result::fail('Could not move new version into place');
+                return Result::fail('Could not move the new version into place: ' . $moved->message() . $suffix);
             }
         } finally {
             $this->maintenance->disable();
@@ -177,7 +188,10 @@ final class Deployer implements DeployerInterface
 
         $health = $this->health->check($this->healthUrl);
         if (! $health->isOk()) {
-            $this->backups->restoreLatest($deployment->targetSlug(), $targetDir);
+            $restored = $this->backups->restoreLatest($deployment->targetSlug(), $targetDir);
+            if (! $restored->isOk()) {
+                return Result::fail('Health check failed (' . $health->message() . ') and automatic rollback ALSO failed (' . $restored->message() . '). Manual action required: restore the latest backup from the deployward-backups directory under uploads.');
+            }
             return Result::fail('Health check failed, rolled back: ' . $health->message());
         }
 

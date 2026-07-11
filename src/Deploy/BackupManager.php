@@ -8,16 +8,19 @@ final class BackupManager implements BackupManagerInterface
 {
     /** @var string */
     private $baseDir;
+    /** @var DirectoryMoverInterface */
+    private $mover;
 
-    public function __construct(string $baseDir)
+    public function __construct(string $baseDir, DirectoryMoverInterface $mover)
     {
         $this->baseDir = rtrim($baseDir, '/');
+        $this->mover = $mover;
     }
 
     public function ensureProtected(): void
     {
-        if (! is_dir($this->baseDir)) {
-            wp_mkdir_p($this->baseDir);
+        if (! is_dir($this->baseDir) && ! wp_mkdir_p($this->baseDir)) {
+            return;
         }
         $index = $this->baseDir . '/index.php';
         if (! is_file($index)) {
@@ -36,10 +39,13 @@ final class BackupManager implements BackupManagerInterface
         }
         $this->ensureProtected();
         $slugDir = $this->baseDir . '/' . $slug;
-        wp_mkdir_p($slugDir);
+        if (! wp_mkdir_p($slugDir)) {
+            return Result::fail('Could not create backup directory ' . $slugDir . ' (check that the uploads directory is writable)');
+        }
         $dest = $slugDir . '/' . gmdate('Ymd-His') . '-' . substr($sha, 0, 8);
-        if (! @rename($targetDir, $dest)) {
-            return Result::fail('Could not move current version into backups');
+        $moved = $this->mover->move($targetDir, $dest);
+        if (! $moved->isOk()) {
+            return Result::fail('Could not move the current version into backups: ' . $moved->message());
         }
 
         return Result::ok($dest);
@@ -53,14 +59,18 @@ final class BackupManager implements BackupManagerInterface
         }
         $sidecar = $this->baseDir . '/.restore-tmp-' . $slug . '-' . gmdate('YmdHis');
         $hadTarget = is_dir($targetDir);
-        if ($hadTarget && ! @rename($targetDir, $sidecar)) {
-            return Result::fail('Could not set aside the current version for restore');
-        }
-        if (! @rename($latest, $targetDir)) {
-            if ($hadTarget) {
-                @rename($sidecar, $targetDir);
+        if ($hadTarget) {
+            $setAside = $this->mover->move($targetDir, $sidecar);
+            if (! $setAside->isOk()) {
+                return Result::fail('Could not set aside the current version for restore: ' . $setAside->message());
             }
-            return Result::fail('Could not restore backup into place');
+        }
+        $restored = $this->mover->move($latest, $targetDir);
+        if (! $restored->isOk()) {
+            if ($hadTarget) {
+                $this->mover->move($sidecar, $targetDir);
+            }
+            return Result::fail('Could not restore backup into place: ' . $restored->message());
         }
         if ($hadTarget) {
             $this->deleteDir($sidecar);

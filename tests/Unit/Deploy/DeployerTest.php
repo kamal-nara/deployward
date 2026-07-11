@@ -7,6 +7,7 @@ use Deployward\Config\Deployment;
 use Deployward\Config\DeploymentRepositoryInterface;
 use Deployward\Deploy\BackupManagerInterface;
 use Deployward\Deploy\Deployer;
+use Deployward\Deploy\DirectoryMoverInterface;
 use Deployward\Deploy\ExtractorInterface;
 use Deployward\Deploy\HealthCheckerInterface;
 use Deployward\Deploy\MaintenanceModeInterface;
@@ -83,6 +84,7 @@ final class DeployerTest extends TestCase
             $mocks['extractor'],
             $mocks['validator'],
             $mocks['backups'],
+            $mocks['mover'],
             $mocks['health'],
             $mocks['maintenance'],
             $mocks['log'],
@@ -127,7 +129,6 @@ final class DeployerTest extends TestCase
 
     public function test_rolls_back_when_health_check_fails(): void
     {
-        // Real payload dir and temp target root so rename() succeeds.
         $payloadDir = sys_get_temp_dir() . '/dw-payload-' . uniqid('', true);
         mkdir($payloadDir, 0755, true);
 
@@ -137,6 +138,7 @@ final class DeployerTest extends TestCase
 
         $extractor = Mockery::mock(ExtractorInterface::class);
         $extractor->shouldReceive('extract')->andReturn(Result::ok($payloadDir));
+        $extractor->shouldReceive('cleanup')->once()->with($payloadDir);
 
         $validator = Mockery::mock(PayloadValidatorInterface::class);
         $validator->shouldReceive('validate')->andReturn(Result::ok('nara-core'));
@@ -148,6 +150,9 @@ final class DeployerTest extends TestCase
         $backups->shouldReceive('restoreLatest')->once()->andReturn(
             Result::ok($this->tempPluginRoot . '/nara-core')
         );
+
+        $mover = Mockery::mock(DirectoryMoverInterface::class);
+        $mover->shouldReceive('move')->once()->andReturn(Result::ok($this->tempPluginRoot . '/nara-core'));
 
         $health = Mockery::mock(HealthCheckerInterface::class);
         $health->shouldReceive('check')->andReturn(Result::fail('fatal'));
@@ -167,7 +172,7 @@ final class DeployerTest extends TestCase
 
         $mocks = array(
             'github' => $github, 'extractor' => $extractor, 'validator' => $validator,
-            'backups' => $backups, 'health' => $health, 'maintenance' => $maintenance,
+            'backups' => $backups, 'mover' => $mover, 'health' => $health, 'maintenance' => $maintenance,
             'log' => $log, 'repository' => $repository, 'notifier' => $notifier,
         );
 
@@ -178,9 +183,121 @@ final class DeployerTest extends TestCase
         $this->assertStringContainsString('rolled back', $result->message());
     }
 
+    public function test_health_failure_with_failed_restore_reports_manual_action(): void
+    {
+        $payloadDir = sys_get_temp_dir() . '/dw-payload-' . uniqid('', true);
+        mkdir($payloadDir, 0755, true);
+
+        $github = Mockery::mock(GitHubClientInterface::class);
+        $github->shouldReceive('resolveSha')->andReturn(Result::ok('newsha'));
+        $github->shouldReceive('downloadZipball')->andReturn(Result::ok('/tmp/x.zip'));
+
+        $extractor = Mockery::mock(ExtractorInterface::class);
+        $extractor->shouldReceive('extract')->andReturn(Result::ok($payloadDir));
+        $extractor->shouldReceive('cleanup')->once()->with($payloadDir);
+
+        $validator = Mockery::mock(PayloadValidatorInterface::class);
+        $validator->shouldReceive('validate')->andReturn(Result::ok('nara-core'));
+
+        $backups = Mockery::mock(BackupManagerInterface::class);
+        $backups->shouldReceive('backup')->andReturn(
+            Result::skip('Nothing to back up; target does not exist yet')
+        );
+        $backups->shouldReceive('restoreLatest')->once()->andReturn(Result::fail('no backup'));
+
+        $mover = Mockery::mock(DirectoryMoverInterface::class);
+        $mover->shouldReceive('move')->once()->andReturn(Result::ok($this->tempPluginRoot . '/nara-core'));
+
+        $health = Mockery::mock(HealthCheckerInterface::class);
+        $health->shouldReceive('check')->andReturn(Result::fail('fatal'));
+
+        $maintenance = Mockery::mock(MaintenanceModeInterface::class);
+        $maintenance->shouldReceive('enable')->once();
+        $maintenance->shouldReceive('disable')->once();
+
+        $log = Mockery::mock(DeployLogInterface::class);
+        $log->shouldReceive('record')->once()->with(
+            Mockery::on(function ($row) {
+                return isset($row['status']) && $row['status'] === 'failed';
+            })
+        );
+
+        $notifier = Mockery::mock(NotifierInterface::class);
+        $notifier->shouldReceive('notify')->once();
+
+        $repository = Mockery::mock(DeploymentRepositoryInterface::class);
+        $repository->shouldNotReceive('save');
+
+        $mocks = array(
+            'github' => $github, 'extractor' => $extractor, 'validator' => $validator,
+            'backups' => $backups, 'mover' => $mover, 'health' => $health, 'maintenance' => $maintenance,
+            'log' => $log, 'repository' => $repository, 'notifier' => $notifier,
+        );
+
+        $result = $this->deployer($mocks)->deploy($this->deployment(), 'webhook');
+
+        $this->assertFalse($result->isOk());
+        $this->assertStringContainsString('Manual action required', $result->message());
+        $this->assertStringContainsString('fatal', $result->message());
+        $this->assertStringContainsString('no backup', $result->message());
+    }
+
+    public function test_swap_move_failure_restores_and_reports(): void
+    {
+        $payloadDir = sys_get_temp_dir() . '/dw-payload-' . uniqid('', true);
+        mkdir($payloadDir, 0755, true);
+
+        $github = Mockery::mock(GitHubClientInterface::class);
+        $github->shouldReceive('resolveSha')->andReturn(Result::ok('newsha'));
+        $github->shouldReceive('downloadZipball')->andReturn(Result::ok('/tmp/x.zip'));
+
+        $extractor = Mockery::mock(ExtractorInterface::class);
+        $extractor->shouldReceive('extract')->andReturn(Result::ok($payloadDir));
+        $extractor->shouldReceive('cleanup')->once()->with($payloadDir);
+
+        $validator = Mockery::mock(PayloadValidatorInterface::class);
+        $validator->shouldReceive('validate')->andReturn(Result::ok('nara-core'));
+
+        $backups = Mockery::mock(BackupManagerInterface::class);
+        $backups->shouldReceive('backup')->andReturn(Result::ok($this->tempPluginRoot . '/backup-1'));
+        $backups->shouldReceive('restoreLatest')->once()->andReturn(
+            Result::ok($this->tempPluginRoot . '/nara-core')
+        );
+
+        $mover = Mockery::mock(DirectoryMoverInterface::class);
+        $mover->shouldReceive('move')->once()->andReturn(Result::fail('Invalid cross-device link'));
+
+        $health = Mockery::mock(HealthCheckerInterface::class);
+        $health->shouldNotReceive('check');
+
+        $maintenance = Mockery::mock(MaintenanceModeInterface::class);
+        $maintenance->shouldReceive('enable')->once();
+        $maintenance->shouldReceive('disable')->once();
+
+        $log = Mockery::mock(DeployLogInterface::class);
+        $log->shouldReceive('record')->once();
+
+        $notifier = Mockery::mock(NotifierInterface::class);
+        $notifier->shouldReceive('notify')->once();
+
+        $repository = Mockery::mock(DeploymentRepositoryInterface::class);
+        $repository->shouldNotReceive('save');
+
+        $mocks = array(
+            'github' => $github, 'extractor' => $extractor, 'validator' => $validator,
+            'backups' => $backups, 'mover' => $mover, 'health' => $health, 'maintenance' => $maintenance,
+            'log' => $log, 'repository' => $repository, 'notifier' => $notifier,
+        );
+
+        $result = $this->deployer($mocks)->deploy($this->deployment(), 'webhook');
+
+        $this->assertFalse($result->isOk());
+        $this->assertStringContainsString('Invalid cross-device link', $result->message());
+        $this->assertStringContainsString('previous version was restored', $result->message());
+    }
+
     public function test_happy_path_deploy_saves_sha_and_logs_success(): void
     {
-        // Real payload dir so rename() into tempPluginRoot/nara-core succeeds.
         $payloadDir = sys_get_temp_dir() . '/dw-payload-happy-' . uniqid('', true);
         mkdir($payloadDir, 0755, true);
 
@@ -190,6 +307,7 @@ final class DeployerTest extends TestCase
 
         $extractor = Mockery::mock(ExtractorInterface::class);
         $extractor->shouldReceive('extract')->once()->andReturn(Result::ok($payloadDir));
+        $extractor->shouldReceive('cleanup')->once()->with($payloadDir);
 
         $validator = Mockery::mock(PayloadValidatorInterface::class);
         $validator->shouldReceive('validate')->once()->andReturn(Result::ok('nara-core'));
@@ -199,6 +317,9 @@ final class DeployerTest extends TestCase
             Result::skip('Nothing to back up; target does not exist yet')
         );
         $backups->shouldReceive('prune')->once();
+
+        $mover = Mockery::mock(DirectoryMoverInterface::class);
+        $mover->shouldReceive('move')->once()->andReturn(Result::ok($this->tempPluginRoot . '/nara-core'));
 
         $health = Mockery::mock(HealthCheckerInterface::class);
         $health->shouldReceive('check')->once()->andReturn(Result::ok(200));
@@ -226,7 +347,7 @@ final class DeployerTest extends TestCase
 
         $mocks = array(
             'github' => $github, 'extractor' => $extractor, 'validator' => $validator,
-            'backups' => $backups, 'health' => $health, 'maintenance' => $maintenance,
+            'backups' => $backups, 'mover' => $mover, 'health' => $health, 'maintenance' => $maintenance,
             'log' => $log, 'repository' => $repository, 'notifier' => $notifier,
         );
 
@@ -243,6 +364,7 @@ final class DeployerTest extends TestCase
             'extractor' => Mockery::mock(ExtractorInterface::class),
             'validator' => Mockery::mock(PayloadValidatorInterface::class),
             'backups' => Mockery::mock(BackupManagerInterface::class),
+            'mover' => Mockery::mock(DirectoryMoverInterface::class),
             'health' => Mockery::mock(HealthCheckerInterface::class),
             'maintenance' => Mockery::mock(MaintenanceModeInterface::class),
             'log' => Mockery::mock(DeployLogInterface::class),

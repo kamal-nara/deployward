@@ -5,10 +5,17 @@ namespace Deployward\Tests\Unit\Deploy;
 use Brain\Monkey;
 use Brain\Monkey\Functions;
 use Deployward\Deploy\BackupManager;
+use Deployward\Deploy\DirectoryMover;
+use Deployward\Deploy\DirectoryMoverInterface;
+use Deployward\Support\Result;
+use Mockery;
+use Mockery\Adapter\Phpunit\MockeryPHPUnitIntegration;
 use PHPUnit\Framework\TestCase;
 
 final class BackupManagerTest extends TestCase
 {
+    use MockeryPHPUnitIntegration;
+
     private $tmp;
 
     protected function setUp(): void
@@ -43,7 +50,7 @@ final class BackupManagerTest extends TestCase
     public function test_backup_moves_current_target_aside(): void
     {
         $target = $this->makeTarget('v1');
-        $manager = new BackupManager($this->tmp . '/backups');
+        $manager = new BackupManager($this->tmp . '/backups', new DirectoryMover());
 
         $result = $manager->backup($target, 'nara-core', 'aaaaaaaa');
 
@@ -54,7 +61,7 @@ final class BackupManagerTest extends TestCase
 
     public function test_backup_skips_when_target_missing(): void
     {
-        $manager = new BackupManager($this->tmp . '/backups');
+        $manager = new BackupManager($this->tmp . '/backups', new DirectoryMover());
 
         $result = $manager->backup($this->tmp . '/plugins/none', 'none', 'aaaaaaaa');
 
@@ -64,7 +71,7 @@ final class BackupManagerTest extends TestCase
     public function test_restore_latest_brings_back_previous_version(): void
     {
         $target = $this->makeTarget('v1');
-        $manager = new BackupManager($this->tmp . '/backups');
+        $manager = new BackupManager($this->tmp . '/backups', new DirectoryMover());
         $manager->backup($target, 'nara-core', 'aaaaaaaa');
         $this->makeTarget('v2');
 
@@ -76,7 +83,7 @@ final class BackupManagerTest extends TestCase
 
     public function test_prune_keeps_only_n_newest(): void
     {
-        $manager = new BackupManager($this->tmp . '/backups');
+        $manager = new BackupManager($this->tmp . '/backups', new DirectoryMover());
         foreach (array('20260101-000001-a', '20260101-000002-b', '20260101-000003-c', '20260101-000004-d') as $name) {
             mkdir($this->tmp . '/backups/nara-core/' . $name, 0777, true);
         }
@@ -91,7 +98,7 @@ final class BackupManagerTest extends TestCase
 
     public function test_ensure_protected_writes_guard_files(): void
     {
-        $manager = new BackupManager($this->tmp . '/backups');
+        $manager = new BackupManager($this->tmp . '/backups', new DirectoryMover());
         $manager->ensureProtected();
 
         $this->assertFileExists($this->tmp . '/backups/index.php');
@@ -100,14 +107,14 @@ final class BackupManagerTest extends TestCase
 
     public function test_latest_returns_null_when_no_backups(): void
     {
-        $manager = new BackupManager($this->tmp . '/backups');
+        $manager = new BackupManager($this->tmp . '/backups', new DirectoryMover());
 
         $this->assertNull($manager->latest('nara-core'));
     }
 
     public function test_restore_latest_fails_when_no_backup(): void
     {
-        $manager = new BackupManager($this->tmp . '/backups');
+        $manager = new BackupManager($this->tmp . '/backups', new DirectoryMover());
 
         $result = $manager->restoreLatest('nara-core', $this->tmp . '/plugins/nara-core');
 
@@ -116,7 +123,7 @@ final class BackupManagerTest extends TestCase
 
     public function test_prune_deletes_the_old_backups(): void
     {
-        $manager = new BackupManager($this->tmp . '/backups');
+        $manager = new BackupManager($this->tmp . '/backups', new DirectoryMover());
         foreach (array('20260101-000001-a', '20260101-000002-b', '20260101-000003-c') as $name) {
             mkdir($this->tmp . '/backups/nara-core/' . $name, 0777, true);
         }
@@ -126,5 +133,45 @@ final class BackupManagerTest extends TestCase
         $this->assertDirectoryDoesNotExist($this->tmp . '/backups/nara-core/20260101-000001-a');
         $this->assertDirectoryDoesNotExist($this->tmp . '/backups/nara-core/20260101-000002-b');
         $this->assertDirectoryExists($this->tmp . '/backups/nara-core/20260101-000003-c');
+    }
+
+    public function test_backup_fails_clearly_when_backup_dir_cannot_be_created(): void
+    {
+        $target = $this->makeTarget('v1');
+        Functions\when('wp_mkdir_p')->justReturn(false);
+        $manager = new BackupManager($this->tmp . '/backups', new DirectoryMover());
+
+        $result = $manager->backup($target, 'nara-core', 'aaaaaaaa');
+
+        $this->assertFalse($result->isOk());
+        $this->assertStringContainsString($this->tmp . '/backups/nara-core', $result->message());
+        $this->assertStringContainsString('writable', $result->message());
+    }
+
+    public function test_backup_reports_mover_reason_on_move_failure(): void
+    {
+        $target = $this->makeTarget('v1');
+        $mover = Mockery::mock(DirectoryMoverInterface::class);
+        $mover->shouldReceive('move')->once()->andReturn(Result::fail('rename(): Permission denied'));
+        $manager = new BackupManager($this->tmp . '/backups', $mover);
+
+        $result = $manager->backup($target, 'nara-core', 'aaaaaaaa');
+
+        $this->assertFalse($result->isOk());
+        $this->assertStringContainsString('Permission denied', $result->message());
+    }
+
+    public function test_restore_reports_mover_reason(): void
+    {
+        mkdir($this->tmp . '/backups/nara-core/20260101-000001-a', 0777, true);
+        $target = $this->makeTarget('v-current');
+        $mover = Mockery::mock(DirectoryMoverInterface::class);
+        $mover->shouldReceive('move')->once()->andReturn(Result::fail('EXDEV: cross-device link'));
+        $manager = new BackupManager($this->tmp . '/backups', $mover);
+
+        $result = $manager->restoreLatest('nara-core', $target);
+
+        $this->assertFalse($result->isOk());
+        $this->assertStringContainsString('cross-device link', $result->message());
     }
 }

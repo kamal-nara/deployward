@@ -31,6 +31,39 @@ final class HealthCheckerTest extends TestCase
         $this->assertTrue((new HealthChecker())->check('https://nara.local/')->isOk());
     }
 
+    public function test_check_busts_full_page_caches_with_a_unique_url(): void
+    {
+        $requestedUrl = null;
+        Functions\when('wp_remote_get')->alias(function ($url) use (&$requestedUrl) {
+            $requestedUrl = $url;
+
+            return array();
+        });
+        Functions\when('wp_remote_retrieve_response_code')->justReturn(200);
+        Functions\when('wp_remote_retrieve_body')->justReturn('<html>ok</html>');
+
+        (new HealthChecker())->check('https://nara.local/');
+
+        $this->assertStringContainsString('dw_health=', (string) $requestedUrl);
+        $this->assertStringStartsWith('https://nara.local/?dw_health=', (string) $requestedUrl);
+    }
+
+    public function test_check_appends_cache_buster_with_ampersand_when_url_has_query(): void
+    {
+        $requestedUrl = null;
+        Functions\when('wp_remote_get')->alias(function ($url) use (&$requestedUrl) {
+            $requestedUrl = $url;
+
+            return array();
+        });
+        Functions\when('wp_remote_retrieve_response_code')->justReturn(200);
+        Functions\when('wp_remote_retrieve_body')->justReturn('<html>ok</html>');
+
+        (new HealthChecker())->check('https://nara.local/?foo=bar');
+
+        $this->assertStringContainsString('&dw_health=', (string) $requestedUrl);
+    }
+
     public function test_unhealthy_on_500(): void
     {
         Functions\when('wp_remote_get')->justReturn(array());

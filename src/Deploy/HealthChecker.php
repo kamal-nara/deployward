@@ -8,7 +8,8 @@ final class HealthChecker implements HealthCheckerInterface
 {
     public function check(string $url): Result
     {
-        $response = wp_remote_get($url, array(
+        $bustedUrl = $url . (strpos($url, '?') === false ? '?' : '&') . 'dw_health=' . rawurlencode(uniqid('', true));
+        $response = wp_remote_get($bustedUrl, array(
             'timeout' => 20,
             'redirection' => 2,
             'sslverify' => true,

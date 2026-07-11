@@ -7,6 +7,7 @@ use Deployward\Config\DeploymentRepositoryInterface;
 use Deployward\Deploy\BackupManager;
 use Deployward\Deploy\Deployer;
 use Deployward\Deploy\DeployerInterface;
+use Deployward\Deploy\DirectoryMover;
 use Deployward\Deploy\Extractor;
 use Deployward\Deploy\HealthChecker;
 use Deployward\Deploy\MaintenanceMode;
@@ -48,13 +49,17 @@ final class Container
         $uploads = wp_upload_dir();
         $backupsBase = trailingslashit($uploads['basedir'])
             . 'deployward-backups-' . substr(md5(AUTH_SALT), 0, 8);
+        $workBase = trailingslashit($uploads['basedir'])
+            . 'deployward-work-' . substr(md5(AUTH_SALT), 0, 8);
         $muDir = defined('WPMU_PLUGIN_DIR') ? WPMU_PLUGIN_DIR : WP_CONTENT_DIR . '/mu-plugins';
+        $mover = new DirectoryMover();
 
         return new Deployer(
             $this->github(),
-            new Extractor(get_temp_dir()),
+            new Extractor($workBase),
             new PayloadValidator(),
-            new BackupManager($backupsBase),
+            new BackupManager($backupsBase, $mover),
+            $mover,
             new HealthChecker(),
             new MaintenanceMode(ABSPATH),
             $this->log(),
