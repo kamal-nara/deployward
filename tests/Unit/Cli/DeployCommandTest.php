@@ -57,6 +57,54 @@ final class DeployCommandTest extends TestCase
         $this->assertNotEmpty(\WP_CLI::$success);
     }
 
+    public function test_add_with_auto_deploy_flags_saves_enabled_deployment(): void
+    {
+        $captured = null;
+        $repository = Mockery::mock(DeploymentRepositoryInterface::class);
+        $repository->shouldReceive('save')->once()->with(Mockery::on(function ($d) use (&$captured) {
+            $captured = $d;
+            return true;
+        }));
+        $command = new DeployCommand($repository, Mockery::mock(DeployerInterface::class), Mockery::mock(DeployLogInterface::class));
+
+        $command->add(array(), array(
+            'id' => 'abc',
+            'repo' => 'Nara-IT/nara-core',
+            'branch' => 'main',
+            'visibility' => 'public',
+            'type' => 'plugin',
+            'slug' => 'nara-core',
+            'auto-deploy' => true,
+            'poll-interval' => '15',
+        ));
+
+        $this->assertTrue($captured->isAutoDeployEnabled());
+        $this->assertSame(15, $captured->pollInterval());
+    }
+
+    public function test_add_without_auto_deploy_flags_saves_disabled_deployment(): void
+    {
+        $captured = null;
+        $repository = Mockery::mock(DeploymentRepositoryInterface::class);
+        $repository->shouldReceive('save')->once()->with(Mockery::on(function ($d) use (&$captured) {
+            $captured = $d;
+            return true;
+        }));
+        $command = new DeployCommand($repository, Mockery::mock(DeployerInterface::class), Mockery::mock(DeployLogInterface::class));
+
+        $command->add(array(), array(
+            'id' => 'abc',
+            'repo' => 'Nara-IT/nara-core',
+            'branch' => 'main',
+            'visibility' => 'public',
+            'type' => 'plugin',
+            'slug' => 'nara-core',
+        ));
+
+        $this->assertFalse($captured->isAutoDeployEnabled());
+        $this->assertSame(5, $captured->pollInterval());
+    }
+
     public function test_deploy_invokes_deployer_for_known_id(): void
     {
         $deployment = Deployment::fromArray(array(

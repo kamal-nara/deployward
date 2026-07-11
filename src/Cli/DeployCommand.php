@@ -51,6 +51,12 @@ final class DeployCommand
      *
      * [--token=<token>]
      * : GitHub fine-grained PAT for private repos.
+     *
+     * [--auto-deploy]
+     * : Deploy automatically when new commits land on the watched branch. Off by default.
+     *
+     * [--poll-interval=<minutes>]
+     * : How often to check for new commits when auto deploy is on: 5, 15, 30, or 60. Default: 5.
      */
     public function add(array $args, array $assoc): void
     {
@@ -65,6 +71,8 @@ final class DeployCommand
                 'target_slug' => isset($assoc['slug']) ? $assoc['slug'] : '',
                 'token' => isset($assoc['token']) ? $assoc['token'] : '',
                 'webhook_secret' => wp_generate_password(32, false),
+                'auto_deploy' => isset($assoc['auto-deploy']),
+                'poll_interval' => isset($assoc['poll-interval']) ? (int) $assoc['poll-interval'] : 5,
             ));
         } catch (\InvalidArgumentException $e) {
             \WP_CLI::error($e->getMessage());
@@ -83,13 +91,14 @@ final class DeployCommand
     {
         foreach ($this->repository->all() as $deployment) {
             \WP_CLI::line(sprintf(
-                '%s  %s@%s  -> %s/%s  [%s]',
+                '%s  %s@%s  -> %s/%s  [%s]  %s',
                 $deployment->id(),
                 $deployment->repo(),
                 $deployment->branch(),
                 $deployment->targetType(),
                 $deployment->targetSlug(),
-                $deployment->lastDeployedSha() === '' ? 'never' : substr($deployment->lastDeployedSha(), 0, 8)
+                $deployment->lastDeployedSha() === '' ? 'never' : substr($deployment->lastDeployedSha(), 0, 8),
+                $deployment->isAutoDeployEnabled() ? 'auto:' . $deployment->pollInterval() . 'm' : 'manual'
             ));
         }
     }

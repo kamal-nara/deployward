@@ -17,11 +17,12 @@ final class WebhookControllerTest extends TestCase
 {
     use MockeryPHPUnitIntegration;
 
-    private function deployment(string $secret = 'whsec'): Deployment
+    private function deployment(string $secret = 'whsec', bool $autoDeploy = false): Deployment
     {
         return Deployment::fromArray(array(
             'id' => 'dw_abc', 'repo' => 'o/r', 'branch' => 'main', 'visibility' => 'public',
             'target_type' => 'plugin', 'target_slug' => 'sample', 'token' => '', 'webhook_secret' => $secret,
+            'auto_deploy' => $autoDeploy,
         ));
     }
 
@@ -92,7 +93,7 @@ final class WebhookControllerTest extends TestCase
     public function test_push_to_watched_branch_queues_deploy_202(): void
     {
         $repo = Mockery::mock(DeploymentRepositoryInterface::class);
-        $repo->shouldReceive('find')->andReturn($this->deployment());
+        $repo->shouldReceive('find')->andReturn($this->deployment('whsec', true));
         $verifier = Mockery::mock(SignatureVerifierInterface::class);
         $verifier->shouldReceive('verify')->andReturn(true);
         $scheduler = Mockery::mock(DeploySchedulerInterface::class);
@@ -103,5 +104,21 @@ final class WebhookControllerTest extends TestCase
 
         $this->assertSame(202, $res->status());
         $this->assertSame('abc1234', $res->data()['sha']);
+    }
+
+    public function test_push_to_watched_branch_with_auto_deploy_off_does_not_queue(): void
+    {
+        $repo = Mockery::mock(DeploymentRepositoryInterface::class);
+        $repo->shouldReceive('find')->andReturn($this->deployment('whsec', false));
+        $verifier = Mockery::mock(SignatureVerifierInterface::class);
+        $verifier->shouldReceive('verify')->andReturn(true);
+        $scheduler = Mockery::mock(DeploySchedulerInterface::class);
+        $scheduler->shouldNotReceive('schedule');
+
+        $res = $this->controller($repo, $verifier, $scheduler)
+            ->handle('dw_abc', '{"ref":"refs/heads/main","after":"abc1234"}', 'sha256=ok', 'push');
+
+        $this->assertSame(200, $res->status());
+        $this->assertSame('auto deploy is disabled for this deployment', $res->data()['message']);
     }
 }

@@ -524,6 +524,11 @@
   display: none;
 }
 
+/* Poll interval row: only visible when form has .is-auto */
+#deployward-app form:not(.is-auto) .dw-interval-row {
+  display: none;
+}
+
 /* Branch row: action group with a select and a fallback input side by side */
 .dw-branch-row {
   display: flex;
@@ -1095,6 +1100,18 @@
 .dw-pill.is-failed {
   background: var(--dw-danger-bg);
   color: var(--dw-danger);
+}
+
+.dw-pill--mode {
+  background: var(--dw-bg);
+  color: var(--dw-muted);
+  border: 1px solid var(--dw-border);
+}
+
+.dw-pill--mode.is-auto {
+  background: var(--dw-accent-soft);
+  color: var(--dw-accent);
+  border: none;
 }
 
 /* ---------------------------------------------------------------------------

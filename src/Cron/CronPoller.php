@@ -11,6 +11,8 @@ final class CronPoller
 {
     const HOOK = 'deployward_poll';
     const INTERVAL = 'deployward_5min';
+    const LAST_POLLS_OPTION = 'deployward_last_polls';
+    const GRACE_SECONDS = 30;
 
     /** @var DeploymentRepositoryInterface */
     private $repository;
@@ -31,9 +33,32 @@ final class CronPoller
 
     public function poll(): void
     {
-        foreach ($this->repository->all() as $deployment) {
-            $this->pollOne($deployment);
+        $lastPolls = get_option(self::LAST_POLLS_OPTION, array());
+        if (! is_array($lastPolls)) {
+            $lastPolls = array();
         }
+        $nextPolls = array();
+
+        foreach ($this->repository->all() as $deployment) {
+            if (! $deployment->isAutoDeployEnabled()) {
+                continue;
+            }
+            $nextPolls[$deployment->id()] = $this->pollIfDue($deployment, $lastPolls);
+        }
+
+        update_option(self::LAST_POLLS_OPTION, $nextPolls, false);
+    }
+
+    private function pollIfDue(Deployment $deployment, array $lastPolls): int
+    {
+        $last = isset($lastPolls[$deployment->id()]) ? (int) $lastPolls[$deployment->id()] : 0;
+        $due = time() >= $last + ($deployment->pollInterval() * 60) - self::GRACE_SECONDS;
+        if (! $due) {
+            return $last;
+        }
+        $this->pollOne($deployment);
+
+        return time();
     }
 
     private function pollOne(Deployment $deployment): void

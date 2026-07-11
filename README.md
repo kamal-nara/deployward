@@ -81,6 +81,12 @@ The token is encrypted with keys derived from your site's auth salts before it i
 
 ## Automatic deploys
 
+Auto deploy is **off by default**. Every new deployment (and every deployment saved before
+this version) starts strictly manual: nothing deploys until you click **Deploy now**. To
+turn it on, edit the deployment and switch **Auto deploy** from **Manual** to **Automatic**.
+The Deployments tab shows an **Auto - every N min** or **Manual** badge on each card so the
+mode is always visible at a glance.
+
 ### Push to deploy (webhook, recommended)
 
 1. On the Deployments tab, click the **Webhook setup** (link icon) button on a deployment.
@@ -97,7 +103,7 @@ Every webhook call is verified with an HMAC signature (`X-Hub-Signature-256`); r
 
 ### Polling fallback (no webhook needed)
 
-If you cannot add a webhook, Deployward also polls GitHub every 5 minutes via WP-Cron and deploys any new commit on the watched branch. This is on by default; the webhook simply makes it instant.
+If you cannot add a webhook, Deployward polls GitHub via WP-Cron and deploys any new commit on the watched branch, but only for deployments with Auto deploy switched on. Each deployment picks its own check interval: 5, 15, 30, or 60 minutes. A single 5-minute master tick wakes Deployward up; deployments with auto deploy off are skipped entirely (no GitHub API calls), and enabled deployments are only checked once their own interval has elapsed.
 
 ## What happens during a deploy
 
@@ -140,6 +146,8 @@ Everything the UI does is also available via WP-CLI.
 | `--visibility=<visibility>` | no | `public` or `private`. Default: `public` |
 | `--token=<token>` | no | GitHub fine-grained PAT, required for private repos |
 | `--id=<id>` | no | Stable id. Generated when omitted |
+| `--auto-deploy` | no | Deploy automatically when new commits land on the watched branch. Off by default |
+| `--poll-interval=<minutes>` | no | How often to check for new commits when auto deploy is on: `5`, `15`, `30`, or `60`. Default: `5` |
 
 ### Examples
 
@@ -154,9 +162,12 @@ wp deployward add --repo=https://github.com/acme/acme-core \
 # Add a theme into a specific folder
 wp deployward add --repo=acme/acme-theme --type=theme --slug=acme
 
+# Add a plugin with auto deploy on, checking every 15 minutes
+wp deployward add --repo=acme/acme-core --auto-deploy --poll-interval=15
+
 # See what is registered (the first column is the id)
 wp deployward list
-# rin70qvs  kamalahmed/licensekit@main  -> plugin/licensekit  [5481e348]
+# rin70qvs  kamalahmed/licensekit@main  -> plugin/licensekit  [5481e348]  manual
 
 # Deploy the latest commit now
 wp deployward deploy rin70qvs
@@ -208,7 +219,7 @@ This produces `deployward-<version>.zip` (built from the last commit, dev files 
 
 ```bash
 composer install
-composer test        # PHPUnit (124 tests)
+composer test        # PHPUnit (138 tests)
 ```
 
 The plugin has no runtime Composer dependencies; `vendor/` is only needed for the test suite.

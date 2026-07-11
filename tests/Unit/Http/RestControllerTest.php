@@ -287,6 +287,37 @@ final class RestControllerTest extends TestCase
         ));
         $this->assertSame(201, $response->status());
     }
+
+    public function test_save_persists_auto_deploy_and_poll_interval(): void
+    {
+        $repo = Mockery::mock(DeploymentRepositoryInterface::class);
+        $repo->shouldReceive('save')->once()->with(Mockery::on(function ($d) {
+            return $d->isAutoDeployEnabled() === true && $d->pollInterval() === 15;
+        }));
+
+        $response = $this->controller($repo)->saveDeployment(array(
+            'repo' => 'Nara-IT/nara-core', 'branch' => 'main', 'visibility' => 'public',
+            'target_type' => 'plugin', 'target_slug' => 'nara-core',
+            'auto_deploy' => true, 'poll_interval' => 15,
+        ));
+
+        $this->assertSame(201, $response->status());
+    }
+
+    public function test_save_without_auto_deploy_keys_defaults_to_disabled(): void
+    {
+        $repo = Mockery::mock(DeploymentRepositoryInterface::class);
+        $repo->shouldReceive('save')->once()->with(Mockery::on(function ($d) {
+            return $d->isAutoDeployEnabled() === false && $d->pollInterval() === 5;
+        }));
+
+        $response = $this->controller($repo)->saveDeployment(array(
+            'repo' => 'Nara-IT/nara-core', 'branch' => 'main', 'visibility' => 'public',
+            'target_type' => 'plugin', 'target_slug' => 'nara-core',
+        ));
+
+        $this->assertSame(201, $response->status());
+    }
 }
 
 namespace Deployward\Tests\Unit\Http;

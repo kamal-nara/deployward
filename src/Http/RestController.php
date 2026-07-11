@@ -70,6 +70,8 @@ final class RestController
                 'token' => $token,
                 'webhook_secret' => $secret,
                 'last_deployed_sha' => $existing !== null ? $existing->lastDeployedSha() : '',
+                'auto_deploy' => isset($params['auto_deploy']) ? $params['auto_deploy'] : false,
+                'poll_interval' => isset($params['poll_interval']) ? $params['poll_interval'] : 5,
             ));
         } catch (\InvalidArgumentException $e) {
             return ApiResponse::error($e->getMessage(), 422);
@@ -180,6 +182,8 @@ final class RestController
             'target_slug' => $deployment->targetSlug(),
             'last_deployed_sha' => $deployment->lastDeployedSha(),
             'has_token' => $deployment->token() !== '',
+            'auto_deploy' => $deployment->isAutoDeployEnabled(),
+            'poll_interval' => $deployment->pollInterval(),
         );
     }
 }

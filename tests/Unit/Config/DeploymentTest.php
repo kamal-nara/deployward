@@ -122,4 +122,48 @@ final class DeploymentTest extends TestCase
         $d = Deployment::fromArray($data);
         $this->assertSame('licensekit', $d->targetSlug());
     }
+
+    public function test_auto_deploy_defaults_to_off_and_five_minutes(): void
+    {
+        $data = $this->validData();
+        unset($data['auto_deploy'], $data['poll_interval']);
+        $d = Deployment::fromArray($data);
+
+        $this->assertFalse($d->isAutoDeployEnabled());
+        $this->assertSame(5, $d->pollInterval());
+    }
+
+    public function test_auto_deploy_accepts_truthy_string_and_bool(): void
+    {
+        $stringTrue = Deployment::fromArray($this->validData(array('auto_deploy' => '1')));
+        $boolTrue = Deployment::fromArray($this->validData(array('auto_deploy' => true)));
+
+        $this->assertTrue($stringTrue->isAutoDeployEnabled());
+        $this->assertTrue($boolTrue->isAutoDeployEnabled());
+    }
+
+    public function test_invalid_poll_interval_throws(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('invalid poll_interval');
+        Deployment::fromArray($this->validData(array('poll_interval' => 45)));
+    }
+
+    public function test_to_array_contains_auto_deploy_fields(): void
+    {
+        $d = Deployment::fromArray($this->validData(array('auto_deploy' => true, 'poll_interval' => 15)));
+        $data = $d->toArray();
+
+        $this->assertTrue($data['auto_deploy']);
+        $this->assertSame(15, $data['poll_interval']);
+    }
+
+    public function test_with_last_deployed_sha_preserves_auto_deploy_fields(): void
+    {
+        $d = Deployment::fromArray($this->validData(array('auto_deploy' => true, 'poll_interval' => 30)));
+        $next = $d->withLastDeployedSha('deadbeef');
+
+        $this->assertTrue($next->isAutoDeployEnabled());
+        $this->assertSame(30, $next->pollInterval());
+    }
 }

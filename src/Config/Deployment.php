@@ -6,6 +6,7 @@ final class Deployment
 {
     const TYPES = array('plugin', 'theme', 'mu-plugin');
     const VISIBILITIES = array('public', 'private');
+    const POLL_INTERVALS = array(5, 15, 30, 60);
 
     /** @var string */
     private $id;
@@ -25,6 +26,10 @@ final class Deployment
     private $webhookSecret;
     /** @var string */
     private $lastDeployedSha;
+    /** @var bool */
+    private $autoDeploy;
+    /** @var int */
+    private $pollInterval;
 
     public function __construct(
         string $id,
@@ -35,7 +40,9 @@ final class Deployment
         string $targetSlug,
         string $token,
         string $webhookSecret,
-        string $lastDeployedSha
+        string $lastDeployedSha,
+        bool $autoDeploy = false,
+        int $pollInterval = 5
     ) {
         $this->id = $id;
         $this->repo = $repo;
@@ -46,6 +53,8 @@ final class Deployment
         $this->token = $token;
         $this->webhookSecret = $webhookSecret;
         $this->lastDeployedSha = $lastDeployedSha;
+        $this->autoDeploy = $autoDeploy;
+        $this->pollInterval = $pollInterval;
     }
 
     public static function normalizeRepo(string $input): string
@@ -103,6 +112,11 @@ final class Deployment
         if (! preg_match('#^[A-Za-z0-9][A-Za-z0-9_-]*$#', $slug)) {
             throw new \InvalidArgumentException('invalid target_slug');
         }
+        $auto = filter_var(isset($data['auto_deploy']) ? $data['auto_deploy'] : false, FILTER_VALIDATE_BOOLEAN);
+        $interval = isset($data['poll_interval']) ? (int) $data['poll_interval'] : 5;
+        if (! in_array($interval, self::POLL_INTERVALS, true)) {
+            throw new \InvalidArgumentException('invalid poll_interval');
+        }
 
         return new self(
             (string) $data['id'],
@@ -113,7 +127,9 @@ final class Deployment
             $slug,
             isset($data['token']) ? (string) $data['token'] : '',
             isset($data['webhook_secret']) ? (string) $data['webhook_secret'] : '',
-            isset($data['last_deployed_sha']) ? (string) $data['last_deployed_sha'] : ''
+            isset($data['last_deployed_sha']) ? (string) $data['last_deployed_sha'] : '',
+            $auto,
+            $interval
         );
     }
 
@@ -129,6 +145,8 @@ final class Deployment
             'token' => $this->token,
             'webhook_secret' => $this->webhookSecret,
             'last_deployed_sha' => $this->lastDeployedSha,
+            'auto_deploy' => $this->autoDeploy,
+            'poll_interval' => $this->pollInterval,
         );
     }
 
@@ -175,6 +193,16 @@ final class Deployment
     public function lastDeployedSha(): string
     {
         return $this->lastDeployedSha;
+    }
+
+    public function isAutoDeployEnabled(): bool
+    {
+        return $this->autoDeploy;
+    }
+
+    public function pollInterval(): int
+    {
+        return $this->pollInterval;
     }
 
     public function withLastDeployedSha(string $sha): self
