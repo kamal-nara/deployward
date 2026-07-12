@@ -81,10 +81,10 @@ The token is encrypted with keys derived from your site's auth salts before it i
 
 ## Automatic deploys
 
-Each deployment has two independent **Deploy triggers**, both off by default: **Webhook**
-and **Scheduled check**. Every new deployment (and every deployment saved before this
-version) starts strictly manual: nothing deploys until you click **Deploy now**. Edit the
-deployment to check one, the other, or both:
+Each deployment has two independent options under **Automatic Deployment Method**, both
+off by default: **Webhook** and **Scheduled check**. Every new deployment (and every
+deployment saved before this version) starts strictly manual: nothing deploys until you
+click **Deploy now**. Edit the deployment to check one, the other, or both:
 
 - **Manual** (default, both off): nothing deploys automatically.
 - **Webhook only**: pushes deploy within seconds, zero polling load on your server or GitHub.
@@ -107,6 +107,8 @@ The Deployments tab shows a precise badge on each card: **Manual**, **Webhook**,
    - Secret: paste it
    - Events: "Just the push event"
 4. Save. From now on, every push to the watched branch deploys within seconds. Pushes to other branches are ignored.
+
+When you tick Webhook on the Add/Edit form, a collapsed "Webhook setup" section shows these settings right on the form (for a new deployment they are generated on save, and the settings open automatically afterwards).
 
 Every webhook call is verified with an HMAC signature (`X-Hub-Signature-256`); requests without a valid signature are rejected.
 

@@ -529,6 +529,41 @@
   display: none;
 }
 
+/* Webhook setup accordion: only visible when form has .is-webhook */
+#deployward-app form:not(.is-webhook) .dw-webhook-accordion {
+  display: none;
+}
+
+.dw-webhook-accordion {
+  border: 1px solid var(--dw-border);
+  border-radius: var(--dw-radius);
+  background: var(--dw-bg);
+  padding: 0;
+}
+
+.dw-webhook-accordion__summary {
+  cursor: pointer;
+  font-size: 0.9em;
+  font-weight: 600;
+  color: var(--dw-text);
+  padding: 10px var(--dw-space-md);
+  user-select: none;
+}
+
+.dw-webhook-accordion__summary:hover {
+  color: var(--dw-accent);
+}
+
+.dw-webhook-accordion[open] .dw-webhook-accordion__summary {
+  border-bottom: 1px solid var(--dw-border);
+}
+
+.dw-webhook-accordion__body {
+  padding: var(--dw-space-md);
+  display: grid;
+  gap: var(--dw-space-sm);
+}
+
 /* Deploy trigger checkbox rows */
 .dw-trigger-row {
   display: flex;

@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Deployward
  * Description: Safely auto-deploys selected plugins and themes from GitHub, with validation, atomic swap, health check, and auto-rollback.
- * Version:     0.4.0
+ * Version:     0.4.1
  * Author:      Kamal Ahmed
  * Requires PHP: 7.4
  * Requires at least: 6.0
@@ -14,7 +14,7 @@ if (! defined('ABSPATH')) {
     exit;
 }
 
-define('DEPLOYWARD_VERSION', '0.4.0');
+define('DEPLOYWARD_VERSION', '0.4.1');
 define('DEPLOYWARD_FILE', __FILE__);
 define('DEPLOYWARD_PATH', plugin_dir_path(__FILE__));
 define('DEPLOYWARD_SLUG', 'deployward');

@@ -62,6 +62,7 @@
     this.activeTab = null;
     this.editingDeployment = null;
     this.logTargetId = null;
+    this.pendingWebhookFor = null;
   }
 
   DeploywardApp.prototype.init = function () {
@@ -277,6 +278,16 @@
       items.forEach(function (d) {
         panel.appendChild(buildDeploymentCard(app, d));
       });
+
+      if (app.pendingWebhookFor) {
+        const target = panel.querySelector('[data-dw-id="' + app.pendingWebhookFor + '"]');
+        app.pendingWebhookFor = null;
+        if (target) {
+          const btn = target.querySelector('[aria-label="Webhook setup"]');
+          if (btn) { btn.click(); }
+          target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }
     }).catch(function () {
       clearEl(panel);
       panel.appendChild(buildToastEl('is-error', 'Network error loading deployments.'));
@@ -313,6 +324,7 @@
   function buildDeploymentCard(app, d) {
     const card = el('div');
     card.className = 'dw-deployment';
+    card.dataset.dwId = d.id;
 
     const head = el('div');
     head.className = 'dw-deployment__head';
@@ -547,6 +559,98 @@
     } catch (_) { /* silent: user can copy manually from the selected text */ }
   }
 
+  function buildWebhookAccordion(app, d, isEdit) {
+    const acc = el('details');
+    acc.className = 'dw-field dw-webhook-accordion';
+
+    const summary = el('summary');
+    summary.className = 'dw-webhook-accordion__summary';
+    summary.textContent = 'Webhook setup';
+    acc.appendChild(summary);
+
+    const body = el('div');
+    body.className = 'dw-webhook-accordion__body';
+    acc.appendChild(body);
+
+    if (isEdit) {
+      appendWebhookAccordionEditBody(app, d, acc, body);
+    } else {
+      appendWebhookAccordionAddBody(body);
+    }
+
+    return acc;
+  }
+
+  function appendWebhookAccordionEditBody(app, d, acc, body) {
+    const help = el('p');
+    help.className = 'dw-help';
+    help.textContent = 'Add this webhook in your GitHub repository: Settings, Webhooks, Add webhook.';
+    body.appendChild(help);
+
+    const root = app.el.dataset.root;
+    body.appendChild(buildWebhookRow('Payload URL', root + 'webhook/' + d.id));
+
+    const secretPlaceholder = el('div');
+    body.appendChild(secretPlaceholder);
+    attachWebhookSecretLoader(app, d, acc, secretPlaceholder);
+
+    appendWebhookHints(body, false);
+  }
+
+  function attachWebhookSecretLoader(app, d, acc, placeholder) {
+    let fetched = false;
+    acc.addEventListener('toggle', function () {
+      if (!acc.open || fetched) { return; }
+      fetched = true;
+      app.api('GET', 'deployments/' + d.id + '/webhook').then(function (res) {
+        clearEl(placeholder);
+        if (res.status !== 200) {
+          renderWebhookSecretError(placeholder);
+          return;
+        }
+        placeholder.appendChild(buildWebhookRow('Secret', res.data.secret));
+      }).catch(function () {
+        clearEl(placeholder);
+        renderWebhookSecretError(placeholder);
+      });
+    });
+  }
+
+  function renderWebhookSecretError(placeholder) {
+    const err = el('p');
+    err.className = 'dw-error';
+    err.textContent = 'Could not load the webhook secret.';
+    placeholder.appendChild(err);
+  }
+
+  function appendWebhookAccordionAddBody(body) {
+    const help = el('p');
+    help.className = 'dw-help';
+    help.textContent = 'The payload URL and secret are created when you save this deployment. After saving, the webhook settings open automatically so you can copy them into GitHub.';
+    body.appendChild(help);
+
+    appendWebhookHints(body, true);
+  }
+
+  function appendWebhookHints(body, includeGithubSteps) {
+    const ctLine = el('p');
+    ctLine.className = 'dw-webhook__hint';
+    ctLine.textContent = 'Content type: application/json';
+    body.appendChild(ctLine);
+
+    const evLine = el('p');
+    evLine.className = 'dw-webhook__hint';
+    evLine.textContent = 'Event: Just the push event';
+    body.appendChild(evLine);
+
+    if (includeGithubSteps) {
+      const stepsLine = el('p');
+      stepsLine.className = 'dw-webhook__hint';
+      stepsLine.textContent = 'GitHub steps: repository Settings, Webhooks, Add webhook, paste the payload URL and secret.';
+      body.appendChild(stepsLine);
+    }
+  }
+
   function buildEditBtn(app, d) {
     const btn = elIconBtn('Edit', 'dashicons-edit', '');
     btn.addEventListener('click', function () {
@@ -629,7 +733,8 @@
     const form = el('form');
     form.className = 'dw-form' +
       (isEdit && d.visibility === 'private' ? ' is-private' : '') +
-      (isEdit && d.poll_deploy ? ' is-poll' : '');
+      (isEdit && d.poll_deploy ? ' is-poll' : '') +
+      (isEdit && d.webhook_deploy ? ' is-webhook' : '');
 
     const errorArea = el('div');
 
@@ -730,12 +835,12 @@
     slugField.wrapper.appendChild(slugHelp);
     form.appendChild(slugField.wrapper);
 
-    /* Deploy triggers */
+    /* Automatic Deployment Method */
     const triggersField = el('div');
     triggersField.className = 'dw-field';
     const triggersLabel = el('label');
     triggersLabel.className = 'dw-label';
-    triggersLabel.textContent = 'Deploy triggers';
+    triggersLabel.textContent = 'Automatic Deployment Method';
     triggersField.appendChild(triggersLabel);
 
     const webhookTrigger = buildTriggerCheckbox(
@@ -743,6 +848,9 @@
       'Webhook: deploy instantly when GitHub pushes to the watched branch',
       isEdit && d.webhook_deploy
     );
+    webhookTrigger.input.addEventListener('change', function () {
+      toggleClass(form, 'is-webhook', webhookTrigger.input.checked);
+    });
     triggersField.appendChild(webhookTrigger.row);
 
     const pollTrigger = buildTriggerCheckbox(
@@ -782,6 +890,8 @@
     });
     intervalField.appendChild(intervalSelect);
     form.appendChild(intervalField);
+
+    form.appendChild(buildWebhookAccordion(app, d, isEdit));
 
     /* Inline error area */
     form.appendChild(errorArea);
@@ -972,7 +1082,14 @@
       setInFlight(submitBtn, false);
       if (res.status === 200 || res.status === 201) {
         app.editingDeployment = null;
-        app.showToast('is-ok', editing ? 'Deployment updated.' : 'Deployment saved.');
+        const isNewWebhookDeployment = !editing && body.webhook_deploy;
+        if (isNewWebhookDeployment) {
+          app.pendingWebhookFor = (res.data && res.data.deployment && res.data.deployment.id) || null;
+        }
+        const successMessage = isNewWebhookDeployment
+          ? 'Deployment saved. Copy the webhook settings below into GitHub.'
+          : (editing ? 'Deployment updated.' : 'Deployment saved.');
+        app.showToast('is-ok', successMessage);
         app.switchTab('deployments');
       } else {
         const msg = (res.data && res.data.error) || 'Save failed.';
@@ -1175,7 +1292,7 @@
       { title: 'Save and deploy', desc: 'Click "Save deployment", then click "Deploy now" on the Deployments tab.' },
     ]));
 
-    wrap.appendChild(buildFlow('Deploy triggers are off by default', [
+    wrap.appendChild(buildFlow('Automatic deployment is off by default', [
       {
         title: 'Choose your triggers per deployment',
         desc: 'Every new deployment starts Manual: nothing deploys until you click Deploy now. Edit a deployment and check Webhook for instant pushes, Scheduled check for polling, or both. Leaving both unchecked keeps it manual.',
