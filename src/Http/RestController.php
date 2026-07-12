@@ -70,7 +70,8 @@ final class RestController
                 'token' => $token,
                 'webhook_secret' => $secret,
                 'last_deployed_sha' => $existing !== null ? $existing->lastDeployedSha() : '',
-                'auto_deploy' => isset($params['auto_deploy']) ? $params['auto_deploy'] : false,
+                'webhook_deploy' => isset($params['webhook_deploy']) ? $params['webhook_deploy'] : false,
+                'poll_deploy' => isset($params['poll_deploy']) ? $params['poll_deploy'] : false,
                 'poll_interval' => isset($params['poll_interval']) ? $params['poll_interval'] : 5,
             ));
         } catch (\InvalidArgumentException $e) {
@@ -182,7 +183,8 @@ final class RestController
             'target_slug' => $deployment->targetSlug(),
             'last_deployed_sha' => $deployment->lastDeployedSha(),
             'has_token' => $deployment->token() !== '',
-            'auto_deploy' => $deployment->isAutoDeployEnabled(),
+            'webhook_deploy' => $deployment->deploysOnPush(),
+            'poll_deploy' => $deployment->deploysOnSchedule(),
             'poll_interval' => $deployment->pollInterval(),
         );
     }

@@ -5,7 +5,7 @@ Safely auto-deploy WordPress plugins and themes straight from GitHub. Push to a 
 Built for hosts where git deployment is painful or unavailable (WP Engine and similar managed hosts). No build server, no central service: each site runs its own agent.
 
 - **Works with public and private repositories** (private repos use a GitHub fine-grained personal access token, stored encrypted)
-- **Three ways to deploy:** push to GitHub (webhook), automatic polling every 5 minutes, or a manual button/CLI command
+- **Choose your deploy triggers per deployment:** manual only, webhook push, scheduled polling, or both, plus a manual button/CLI command that always works
 - **Safety first:** validation, maintenance mode, versioned backups, post-deploy health check, automatic rollback
 - **Deploys plugins, themes, and mu-plugins**, each into a folder you choose
 
@@ -81,13 +81,22 @@ The token is encrypted with keys derived from your site's auth salts before it i
 
 ## Automatic deploys
 
-Auto deploy is **off by default**. Every new deployment (and every deployment saved before
-this version) starts strictly manual: nothing deploys until you click **Deploy now**. To
-turn it on, edit the deployment and switch **Auto deploy** from **Manual** to **Automatic**.
-The Deployments tab shows an **Auto - every N min** or **Manual** badge on each card so the
-mode is always visible at a glance.
+Each deployment has two independent **Deploy triggers**, both off by default: **Webhook**
+and **Scheduled check**. Every new deployment (and every deployment saved before this
+version) starts strictly manual: nothing deploys until you click **Deploy now**. Edit the
+deployment to check one, the other, or both:
 
-### Push to deploy (webhook, recommended)
+- **Manual** (default, both off): nothing deploys automatically.
+- **Webhook only**: pushes deploy within seconds, zero polling load on your server or GitHub.
+- **Scheduled check only**: works without a webhook, and covers private repositories too
+  since the poller uses the same stored token.
+- **Both**: webhook for speed, with the scheduled check as a safety net if a webhook
+  delivery is ever missed.
+
+The Deployments tab shows a precise badge on each card: **Manual**, **Webhook**,
+**Every N min**, or **Webhook + every N min**.
+
+### Webhook trigger (push to deploy)
 
 1. On the Deployments tab, click the **Webhook setup** (link icon) button on a deployment.
 2. Copy the Payload URL and the Secret. The URL looks like:
@@ -101,9 +110,9 @@ mode is always visible at a glance.
 
 Every webhook call is verified with an HMAC signature (`X-Hub-Signature-256`); requests without a valid signature are rejected.
 
-### Polling fallback (no webhook needed)
+### Scheduled check trigger (polling, no webhook needed)
 
-If you cannot add a webhook, Deployward polls GitHub via WP-Cron and deploys any new commit on the watched branch, but only for deployments with Auto deploy switched on. Each deployment picks its own check interval: 5, 15, 30, or 60 minutes. A single 5-minute master tick wakes Deployward up; deployments with auto deploy off are skipped entirely (no GitHub API calls), and enabled deployments are only checked once their own interval has elapsed.
+Deployward polls GitHub via WP-Cron and deploys any new commit on the watched branch, but only for deployments with the Scheduled check trigger checked. Each deployment picks its own check interval: 5, 15, 30, or 60 minutes. A single 5-minute master tick wakes Deployward up; deployments without the Scheduled check trigger are skipped entirely (no GitHub API calls), and enabled deployments are only checked once their own interval has elapsed. This works for private repositories too, since polling reuses the same encrypted token stored for the deployment.
 
 ## What happens during a deploy
 
@@ -146,8 +155,9 @@ Everything the UI does is also available via WP-CLI.
 | `--visibility=<visibility>` | no | `public` or `private`. Default: `public` |
 | `--token=<token>` | no | GitHub fine-grained PAT, required for private repos |
 | `--id=<id>` | no | Stable id. Generated when omitted |
-| `--auto-deploy` | no | Deploy automatically when new commits land on the watched branch. Off by default |
-| `--poll-interval=<minutes>` | no | How often to check for new commits when auto deploy is on: `5`, `15`, `30`, or `60`. Default: `5` |
+| `--webhook-deploy` | no | Deploy instantly when GitHub pushes to the watched branch (requires webhook setup). Off by default |
+| `--poll-deploy` | no | Check for new commits on a schedule and deploy them. Off by default |
+| `--poll-interval=<minutes>` | no | How often to check for new commits when `--poll-deploy` is on: `5`, `15`, `30`, or `60`. Default: `5` |
 
 ### Examples
 
@@ -162,12 +172,12 @@ wp deployward add --repo=https://github.com/acme/acme-core \
 # Add a theme into a specific folder
 wp deployward add --repo=acme/acme-theme --type=theme --slug=acme
 
-# Add a plugin with auto deploy on, checking every 15 minutes
-wp deployward add --repo=acme/acme-core --auto-deploy --poll-interval=15
+# Add a plugin with both deploy triggers on, checking every 15 minutes
+wp deployward add --repo=acme/acme-core --webhook-deploy --poll-deploy --poll-interval=15
 
 # See what is registered (the first column is the id)
 wp deployward list
-# rin70qvs  kamalahmed/licensekit@main  -> plugin/licensekit  [5481e348]  manual
+# rin70qvs  kamalahmed/licensekit@main  -> plugin/licensekit  [5481e348]  webhook+poll:15m
 
 # Deploy the latest commit now
 wp deployward deploy rin70qvs
@@ -219,7 +229,7 @@ This produces `deployward-<version>.zip` (built from the last commit, dev files 
 
 ```bash
 composer install
-composer test        # PHPUnit (138 tests)
+composer test        # PHPUnit (144 tests)
 ```
 
 The plugin has no runtime Composer dependencies; `vendor/` is only needed for the test suite.

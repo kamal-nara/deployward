@@ -45,8 +45,8 @@ final class WebhookController
         if ($ref !== 'refs/heads/' . $deployment->branch()) {
             return ApiResponse::ok(array('message' => 'branch ignored'));
         }
-        if (! $deployment->isAutoDeployEnabled()) {
-            return ApiResponse::ok(array('message' => 'auto deploy is disabled for this deployment'));
+        if (! $deployment->deploysOnPush()) {
+            return ApiResponse::ok(array('message' => 'webhook deploys are disabled for this deployment'));
         }
         $sha = is_array($payload) && isset($payload['after']) ? (string) $payload['after'] : '';
         $this->scheduler->schedule($deployment->id(), 'webhook', false);

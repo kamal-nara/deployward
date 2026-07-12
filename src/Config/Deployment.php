@@ -27,7 +27,9 @@ final class Deployment
     /** @var string */
     private $lastDeployedSha;
     /** @var bool */
-    private $autoDeploy;
+    private $webhookDeploy;
+    /** @var bool */
+    private $pollDeploy;
     /** @var int */
     private $pollInterval;
 
@@ -41,7 +43,8 @@ final class Deployment
         string $token,
         string $webhookSecret,
         string $lastDeployedSha,
-        bool $autoDeploy = false,
+        bool $webhookDeploy = false,
+        bool $pollDeploy = false,
         int $pollInterval = 5
     ) {
         $this->id = $id;
@@ -53,7 +56,8 @@ final class Deployment
         $this->token = $token;
         $this->webhookSecret = $webhookSecret;
         $this->lastDeployedSha = $lastDeployedSha;
-        $this->autoDeploy = $autoDeploy;
+        $this->webhookDeploy = $webhookDeploy;
+        $this->pollDeploy = $pollDeploy;
         $this->pollInterval = $pollInterval;
     }
 
@@ -112,7 +116,13 @@ final class Deployment
         if (! preg_match('#^[A-Za-z0-9][A-Za-z0-9_-]*$#', $slug)) {
             throw new \InvalidArgumentException('invalid target_slug');
         }
-        $auto = filter_var(isset($data['auto_deploy']) ? $data['auto_deploy'] : false, FILTER_VALIDATE_BOOLEAN);
+        $webhook = filter_var(isset($data['webhook_deploy']) ? $data['webhook_deploy'] : false, FILTER_VALIDATE_BOOLEAN);
+        $poll = filter_var(isset($data['poll_deploy']) ? $data['poll_deploy'] : false, FILTER_VALIDATE_BOOLEAN);
+        if (! isset($data['webhook_deploy']) && ! isset($data['poll_deploy'])
+            && filter_var(isset($data['auto_deploy']) ? $data['auto_deploy'] : false, FILTER_VALIDATE_BOOLEAN)) {
+            $webhook = true;
+            $poll = true;
+        }
         $interval = isset($data['poll_interval']) ? (int) $data['poll_interval'] : 5;
         if (! in_array($interval, self::POLL_INTERVALS, true)) {
             throw new \InvalidArgumentException('invalid poll_interval');
@@ -128,7 +138,8 @@ final class Deployment
             isset($data['token']) ? (string) $data['token'] : '',
             isset($data['webhook_secret']) ? (string) $data['webhook_secret'] : '',
             isset($data['last_deployed_sha']) ? (string) $data['last_deployed_sha'] : '',
-            $auto,
+            $webhook,
+            $poll,
             $interval
         );
     }
@@ -145,7 +156,8 @@ final class Deployment
             'token' => $this->token,
             'webhook_secret' => $this->webhookSecret,
             'last_deployed_sha' => $this->lastDeployedSha,
-            'auto_deploy' => $this->autoDeploy,
+            'webhook_deploy' => $this->webhookDeploy,
+            'poll_deploy' => $this->pollDeploy,
             'poll_interval' => $this->pollInterval,
         );
     }
@@ -195,9 +207,14 @@ final class Deployment
         return $this->lastDeployedSha;
     }
 
-    public function isAutoDeployEnabled(): bool
+    public function deploysOnPush(): bool
     {
-        return $this->autoDeploy;
+        return $this->webhookDeploy;
+    }
+
+    public function deploysOnSchedule(): bool
+    {
+        return $this->pollDeploy;
     }
 
     public function pollInterval(): int

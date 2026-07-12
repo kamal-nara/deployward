@@ -52,8 +52,11 @@ final class DeployCommand
      * [--token=<token>]
      * : GitHub fine-grained PAT for private repos.
      *
-     * [--auto-deploy]
-     * : Deploy automatically when new commits land on the watched branch. Off by default.
+     * [--webhook-deploy]
+     * : Deploy instantly when GitHub pushes to the watched branch (requires webhook setup).
+     *
+     * [--poll-deploy]
+     * : Check for new commits on a schedule and deploy them.
      *
      * [--poll-interval=<minutes>]
      * : How often to check for new commits when auto deploy is on: 5, 15, 30, or 60. Default: 5.
@@ -71,7 +74,8 @@ final class DeployCommand
                 'target_slug' => isset($assoc['slug']) ? $assoc['slug'] : '',
                 'token' => isset($assoc['token']) ? $assoc['token'] : '',
                 'webhook_secret' => wp_generate_password(32, false),
-                'auto_deploy' => isset($assoc['auto-deploy']),
+                'webhook_deploy' => isset($assoc['webhook-deploy']),
+                'poll_deploy' => isset($assoc['poll-deploy']),
                 'poll_interval' => isset($assoc['poll-interval']) ? (int) $assoc['poll-interval'] : 5,
             ));
         } catch (\InvalidArgumentException $e) {
@@ -98,9 +102,26 @@ final class DeployCommand
                 $deployment->targetType(),
                 $deployment->targetSlug(),
                 $deployment->lastDeployedSha() === '' ? 'never' : substr($deployment->lastDeployedSha(), 0, 8),
-                $deployment->isAutoDeployEnabled() ? 'auto:' . $deployment->pollInterval() . 'm' : 'manual'
+                $this->modeLabel($deployment)
             ));
         }
+    }
+
+    private function modeLabel(Deployment $deployment): string
+    {
+        $onPush = $deployment->deploysOnPush();
+        $onSchedule = $deployment->deploysOnSchedule();
+        if ($onPush && $onSchedule) {
+            return 'webhook+poll:' . $deployment->pollInterval() . 'm';
+        }
+        if ($onPush) {
+            return 'webhook';
+        }
+        if ($onSchedule) {
+            return 'poll:' . $deployment->pollInterval() . 'm';
+        }
+
+        return 'manual';
     }
 
     /**

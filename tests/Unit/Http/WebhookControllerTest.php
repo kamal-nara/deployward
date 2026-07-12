@@ -17,12 +17,12 @@ final class WebhookControllerTest extends TestCase
 {
     use MockeryPHPUnitIntegration;
 
-    private function deployment(string $secret = 'whsec', bool $autoDeploy = false): Deployment
+    private function deployment(string $secret = 'whsec', bool $webhookDeploy = false, bool $pollDeploy = false): Deployment
     {
         return Deployment::fromArray(array(
             'id' => 'dw_abc', 'repo' => 'o/r', 'branch' => 'main', 'visibility' => 'public',
             'target_type' => 'plugin', 'target_slug' => 'sample', 'token' => '', 'webhook_secret' => $secret,
-            'auto_deploy' => $autoDeploy,
+            'webhook_deploy' => $webhookDeploy, 'poll_deploy' => $pollDeploy,
         ));
     }
 
@@ -106,7 +106,7 @@ final class WebhookControllerTest extends TestCase
         $this->assertSame('abc1234', $res->data()['sha']);
     }
 
-    public function test_push_to_watched_branch_with_auto_deploy_off_does_not_queue(): void
+    public function test_push_to_watched_branch_with_webhook_deploy_off_does_not_queue(): void
     {
         $repo = Mockery::mock(DeploymentRepositoryInterface::class);
         $repo->shouldReceive('find')->andReturn($this->deployment('whsec', false));
@@ -119,6 +119,22 @@ final class WebhookControllerTest extends TestCase
             ->handle('dw_abc', '{"ref":"refs/heads/main","after":"abc1234"}', 'sha256=ok', 'push');
 
         $this->assertSame(200, $res->status());
-        $this->assertSame('auto deploy is disabled for this deployment', $res->data()['message']);
+        $this->assertSame('webhook deploys are disabled for this deployment', $res->data()['message']);
+    }
+
+    public function test_push_with_webhook_off_but_poll_on_does_not_queue(): void
+    {
+        $repo = Mockery::mock(DeploymentRepositoryInterface::class);
+        $repo->shouldReceive('find')->andReturn($this->deployment('whsec', false, true));
+        $verifier = Mockery::mock(SignatureVerifierInterface::class);
+        $verifier->shouldReceive('verify')->andReturn(true);
+        $scheduler = Mockery::mock(DeploySchedulerInterface::class);
+        $scheduler->shouldNotReceive('schedule');
+
+        $res = $this->controller($repo, $verifier, $scheduler)
+            ->handle('dw_abc', '{"ref":"refs/heads/main","after":"abc1234"}', 'sha256=ok', 'push');
+
+        $this->assertSame(200, $res->status());
+        $this->assertSame('webhook deploys are disabled for this deployment', $res->data()['message']);
     }
 }

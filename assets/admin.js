@@ -325,8 +325,9 @@
     const pill = buildPill(d);
     head.appendChild(pill);
     const mode = el('span');
-    mode.className = 'dw-pill dw-pill--mode' + (d.auto_deploy ? ' is-auto' : '');
-    mode.textContent = d.auto_deploy ? 'Auto - every ' + (d.poll_interval || 5) + ' min' : 'Manual';
+    const hasTrigger = !!(d.webhook_deploy || d.poll_deploy);
+    mode.className = 'dw-pill dw-pill--mode' + (hasTrigger ? ' is-auto' : '');
+    mode.textContent = modeLabel(d);
     head.appendChild(mode);
     card.appendChild(head);
 
@@ -376,6 +377,14 @@
   function pillLabel(d) {
     if (!d.last_deployed_sha) { return 'Never deployed'; }
     return 'Deployed';
+  }
+
+  function modeLabel(d) {
+    const interval = d.poll_interval || 5;
+    if (d.webhook_deploy && d.poll_deploy) { return 'Webhook + every ' + interval + ' min'; }
+    if (d.webhook_deploy) { return 'Webhook'; }
+    if (d.poll_deploy) { return 'Every ' + interval + ' min'; }
+    return 'Manual';
   }
 
   function buildDeployBtn(app, d, pill) {
@@ -620,7 +629,7 @@
     const form = el('form');
     form.className = 'dw-form' +
       (isEdit && d.visibility === 'private' ? ' is-private' : '') +
-      (isEdit && d.auto_deploy ? ' is-auto' : '');
+      (isEdit && d.poll_deploy ? ' is-poll' : '');
 
     const errorArea = el('div');
 
@@ -721,24 +730,38 @@
     slugField.wrapper.appendChild(slugHelp);
     form.appendChild(slugField.wrapper);
 
-    /* Auto deploy segmented control */
-    const autoField = el('div');
-    autoField.className = 'dw-field';
-    const autoLabel = el('label');
-    autoLabel.className = 'dw-label';
-    autoLabel.textContent = 'Auto deploy';
-    autoField.appendChild(autoLabel);
+    /* Deploy triggers */
+    const triggersField = el('div');
+    triggersField.className = 'dw-field';
+    const triggersLabel = el('label');
+    triggersLabel.className = 'dw-label';
+    triggersLabel.textContent = 'Deploy triggers';
+    triggersField.appendChild(triggersLabel);
 
-    const autoSegmented = buildAutoSegmented(form, isEdit && d.auto_deploy ? 'on' : 'off');
-    autoField.appendChild(autoSegmented);
+    const webhookTrigger = buildTriggerCheckbox(
+      'dw-trigger-webhook',
+      'Webhook: deploy instantly when GitHub pushes to the watched branch',
+      isEdit && d.webhook_deploy
+    );
+    triggersField.appendChild(webhookTrigger.row);
 
-    const autoHelp = el('p');
-    autoHelp.className = 'dw-help';
-    autoHelp.textContent = 'When on, new commits on the watched branch deploy automatically: instantly via webhook, or checked on the schedule below. When off, nothing deploys until you click Deploy now.';
-    autoField.appendChild(autoHelp);
-    form.appendChild(autoField);
+    const pollTrigger = buildTriggerCheckbox(
+      'dw-trigger-poll',
+      'Scheduled check: look for new commits on a schedule and deploy them',
+      isEdit && d.poll_deploy
+    );
+    pollTrigger.input.addEventListener('change', function () {
+      toggleClass(form, 'is-poll', pollTrigger.input.checked);
+    });
+    triggersField.appendChild(pollTrigger.row);
 
-    /* Poll interval row: visible only when Auto deploy is Automatic */
+    const triggersHelp = el('p');
+    triggersHelp.className = 'dw-help';
+    triggersHelp.textContent = 'Leave both off for manual only: nothing deploys until you click Deploy now.';
+    triggersField.appendChild(triggersHelp);
+    form.appendChild(triggersField);
+
+    /* Poll interval row: visible only when the Scheduled check trigger is on */
     const intervalField = el('div');
     intervalField.className = 'dw-field dw-interval-row';
     const intervalLabel = el('label');
@@ -846,39 +869,23 @@
     return checked ? checked.value : 'public';
   }
 
-  function buildAutoSegmented(form, initial) {
-    const seg = el('div');
-    seg.className = 'dw-segmented';
+  function buildTriggerCheckbox(id, labelText, checked) {
+    const row = el('div');
+    row.className = 'dw-trigger-row';
 
-    const opts = [{ value: 'off', label: 'Manual' }, { value: 'on', label: 'Automatic' }];
-    opts.forEach(function (opt) {
-      const radio = el('input');
-      radio.type = 'radio';
-      radio.className = 'dw-segmented__option';
-      radio.name = 'dw-auto';
-      radio.id = 'dw-auto-' + opt.value;
-      radio.value = opt.value;
-      if (initial === opt.value) { radio.checked = true; }
+    const input = el('input');
+    input.type = 'checkbox';
+    input.className = 'dw-checkbox';
+    input.id = id;
+    input.checked = !!checked;
+    row.appendChild(input);
 
-      radio.addEventListener('change', function () {
-        toggleClass(form, 'is-auto', opt.value === 'on');
-      });
+    const labelEl = el('label');
+    labelEl.htmlFor = id;
+    labelEl.textContent = labelText;
+    row.appendChild(labelEl);
 
-      const labelEl = el('label');
-      labelEl.className = 'dw-segmented__label';
-      labelEl.htmlFor = 'dw-auto-' + opt.value;
-      labelEl.textContent = opt.label;
-
-      seg.appendChild(radio);
-      seg.appendChild(labelEl);
-    });
-
-    return seg;
-  }
-
-  function getAutoDeploy(form) {
-    const checked = form.querySelector('input[name="dw-auto"]:checked');
-    return checked ? checked.value === 'on' : false;
+    return { row: row, input: input };
   }
 
   function fetchBranches(app, repo, visibility, token, branchSelect, branchFallback, branchError, fetchBtn, currentBranch) {
@@ -935,7 +942,6 @@
     const branch = branchSelect.style.display !== 'none'
       ? branchSelect.value
       : branchFallback.value.trim();
-    const auto = getAutoDeploy(form);
     const intervalEl = document.getElementById('dw-poll-interval');
     const pollInterval = intervalEl ? (parseInt(intervalEl.value, 10) || 5) : 5;
 
@@ -953,9 +959,10 @@
       visibility: vis,
       target_type: type,
       target_slug: slug,
-      auto_deploy: auto,
       poll_interval: pollInterval,
     };
+    body.webhook_deploy = document.getElementById('dw-trigger-webhook').checked;
+    body.poll_deploy = document.getElementById('dw-trigger-poll').checked;
     if (editing) { body.id = editing.id; }
     if (token)   { body.token = token; }
 
@@ -1168,14 +1175,14 @@
       { title: 'Save and deploy', desc: 'Click "Save deployment", then click "Deploy now" on the Deployments tab.' },
     ]));
 
-    wrap.appendChild(buildFlow('Automatic deploys are off by default', [
+    wrap.appendChild(buildFlow('Deploy triggers are off by default', [
       {
-        title: 'Enable auto deploy per deployment',
-        desc: 'Every new deployment starts as Manual: nothing deploys until you click Deploy now. Edit a deployment and switch Auto deploy to Automatic to deploy new commits automatically.',
+        title: 'Choose your triggers per deployment',
+        desc: 'Every new deployment starts Manual: nothing deploys until you click Deploy now. Edit a deployment and check Webhook for instant pushes, Scheduled check for polling, or both. Leaving both unchecked keeps it manual.',
       },
       {
         title: 'Pick how fast changes land',
-        desc: 'With a GitHub webhook, pushes deploy within seconds. Without one, Deployward checks the branch on the interval you chose (every 5 to 60 minutes) and deploys any new commit.',
+        desc: 'Webhook deploys within seconds of a push. Scheduled check polls the branch on the interval you choose (every 5 to 60 minutes) and deploys any new commit. Enable either one, or both, for speed with a polling safety net.',
       },
     ]));
 
@@ -1194,7 +1201,7 @@
       },
       {
         title: 'Push to deploy',
-        desc: 'Once Auto deploy is switched to Automatic for this deployment, every push to the watched branch deploys right away. Without a webhook, Deployward instead checks the branch on your chosen interval (5 to 60 minutes).',
+        desc: 'Once the Webhook trigger is checked for this deployment, every push to the watched branch deploys right away. Check Scheduled check instead (or as well) to have Deployward poll the branch on your chosen interval (5 to 60 minutes).',
       },
     ]));
 

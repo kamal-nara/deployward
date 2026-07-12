@@ -123,23 +123,51 @@ final class DeploymentTest extends TestCase
         $this->assertSame('licensekit', $d->targetSlug());
     }
 
-    public function test_auto_deploy_defaults_to_off_and_five_minutes(): void
+    public function test_deploy_triggers_default_to_both_off(): void
     {
         $data = $this->validData();
-        unset($data['auto_deploy'], $data['poll_interval']);
+        unset($data['webhook_deploy'], $data['poll_deploy'], $data['poll_interval']);
         $d = Deployment::fromArray($data);
 
-        $this->assertFalse($d->isAutoDeployEnabled());
+        $this->assertFalse($d->deploysOnPush());
+        $this->assertFalse($d->deploysOnSchedule());
         $this->assertSame(5, $d->pollInterval());
     }
 
-    public function test_auto_deploy_accepts_truthy_string_and_bool(): void
+    public function test_webhook_deploy_only(): void
     {
-        $stringTrue = Deployment::fromArray($this->validData(array('auto_deploy' => '1')));
-        $boolTrue = Deployment::fromArray($this->validData(array('auto_deploy' => true)));
+        $d = Deployment::fromArray($this->validData(array('webhook_deploy' => true, 'poll_deploy' => false)));
 
-        $this->assertTrue($stringTrue->isAutoDeployEnabled());
-        $this->assertTrue($boolTrue->isAutoDeployEnabled());
+        $this->assertTrue($d->deploysOnPush());
+        $this->assertFalse($d->deploysOnSchedule());
+    }
+
+    public function test_poll_deploy_only(): void
+    {
+        $d = Deployment::fromArray($this->validData(array('webhook_deploy' => false, 'poll_deploy' => true)));
+
+        $this->assertFalse($d->deploysOnPush());
+        $this->assertTrue($d->deploysOnSchedule());
+    }
+
+    public function test_legacy_auto_deploy_true_with_no_new_keys_enables_both_triggers(): void
+    {
+        $d = Deployment::fromArray($this->validData(array('auto_deploy' => true)));
+
+        $this->assertTrue($d->deploysOnPush());
+        $this->assertTrue($d->deploysOnSchedule());
+    }
+
+    public function test_legacy_auto_deploy_present_but_new_keys_win(): void
+    {
+        $d = Deployment::fromArray($this->validData(array(
+            'auto_deploy' => true,
+            'webhook_deploy' => false,
+            'poll_deploy' => true,
+        )));
+
+        $this->assertFalse($d->deploysOnPush());
+        $this->assertTrue($d->deploysOnSchedule());
     }
 
     public function test_invalid_poll_interval_throws(): void
@@ -149,21 +177,32 @@ final class DeploymentTest extends TestCase
         Deployment::fromArray($this->validData(array('poll_interval' => 45)));
     }
 
-    public function test_to_array_contains_auto_deploy_fields(): void
+    public function test_to_array_contains_deploy_trigger_fields_not_legacy_auto_deploy(): void
     {
-        $d = Deployment::fromArray($this->validData(array('auto_deploy' => true, 'poll_interval' => 15)));
+        $d = Deployment::fromArray($this->validData(array(
+            'webhook_deploy' => true,
+            'poll_deploy' => true,
+            'poll_interval' => 15,
+        )));
         $data = $d->toArray();
 
-        $this->assertTrue($data['auto_deploy']);
+        $this->assertTrue($data['webhook_deploy']);
+        $this->assertTrue($data['poll_deploy']);
         $this->assertSame(15, $data['poll_interval']);
+        $this->assertArrayNotHasKey('auto_deploy', $data);
     }
 
-    public function test_with_last_deployed_sha_preserves_auto_deploy_fields(): void
+    public function test_with_last_deployed_sha_preserves_deploy_triggers_and_interval(): void
     {
-        $d = Deployment::fromArray($this->validData(array('auto_deploy' => true, 'poll_interval' => 30)));
+        $d = Deployment::fromArray($this->validData(array(
+            'webhook_deploy' => true,
+            'poll_deploy' => true,
+            'poll_interval' => 30,
+        )));
         $next = $d->withLastDeployedSha('deadbeef');
 
-        $this->assertTrue($next->isAutoDeployEnabled());
+        $this->assertTrue($next->deploysOnPush());
+        $this->assertTrue($next->deploysOnSchedule());
         $this->assertSame(30, $next->pollInterval());
     }
 }

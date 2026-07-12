@@ -524,9 +524,31 @@
   display: none;
 }
 
-/* Poll interval row: only visible when form has .is-auto */
-#deployward-app form:not(.is-auto) .dw-interval-row {
+/* Poll interval row: only visible when form has .is-poll */
+#deployward-app form:not(.is-poll) .dw-interval-row {
   display: none;
+}
+
+/* Deploy trigger checkbox rows */
+.dw-trigger-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.dw-trigger-row + .dw-trigger-row {
+  margin-top: 6px;
+}
+
+.dw-trigger-row .dw-checkbox {
+  margin-top: 4px;
+  flex: none;
+}
+
+.dw-trigger-row label {
+  font-size: 0.9em;
+  color: var(--dw-text);
+  cursor: pointer;
 }
 
 /* Branch row: action group with a select and a fallback input side by side */

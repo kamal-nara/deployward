@@ -40,7 +40,7 @@ final class CronPoller
         $nextPolls = array();
 
         foreach ($this->repository->all() as $deployment) {
-            if (! $deployment->isAutoDeployEnabled()) {
+            if (! $deployment->deploysOnSchedule()) {
                 continue;
             }
             $nextPolls[$deployment->id()] = $this->pollIfDue($deployment, $lastPolls);

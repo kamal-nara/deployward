@@ -44,7 +44,7 @@ final class CronPollerTest extends TestCase
         Functions\when('get_option')->justReturn(array());
         Functions\when('update_option')->justReturn(true);
 
-        $deployment = $this->deployment(array('auto_deploy' => true, 'last_deployed_sha' => 'oldsha'));
+        $deployment = $this->deployment(array('poll_deploy' => true, 'last_deployed_sha' => 'oldsha'));
         $repo = Mockery::mock(DeploymentRepositoryInterface::class);
         $repo->shouldReceive('all')->andReturn(array('dw_abc' => $deployment));
         $github = Mockery::mock(GitHubClientInterface::class);
@@ -60,7 +60,7 @@ final class CronPollerTest extends TestCase
         Functions\when('get_option')->justReturn(array());
         Functions\when('update_option')->justReturn(true);
 
-        $deployment = $this->deployment(array('auto_deploy' => true, 'last_deployed_sha' => 'samesha'));
+        $deployment = $this->deployment(array('poll_deploy' => true, 'last_deployed_sha' => 'samesha'));
         $repo = Mockery::mock(DeploymentRepositoryInterface::class);
         $repo->shouldReceive('all')->andReturn(array('dw_abc' => $deployment));
         $github = Mockery::mock(GitHubClientInterface::class);
@@ -76,7 +76,7 @@ final class CronPollerTest extends TestCase
         Functions\when('get_option')->justReturn(array());
         Functions\when('update_option')->justReturn(true);
 
-        $deployment = $this->deployment(array('auto_deploy' => true, 'last_deployed_sha' => 'oldsha'));
+        $deployment = $this->deployment(array('poll_deploy' => true, 'last_deployed_sha' => 'oldsha'));
         $repo = Mockery::mock(DeploymentRepositoryInterface::class);
         $repo->shouldReceive('all')->andReturn(array('dw_abc' => $deployment));
         $github = Mockery::mock(GitHubClientInterface::class);
@@ -118,13 +118,37 @@ final class CronPollerTest extends TestCase
         (new CronPoller($repo, $github, $scheduler))->poll();
     }
 
+    public function test_webhook_only_deployment_is_never_polled_and_pruned_from_map(): void
+    {
+        $deployment = $this->deployment(array('id' => 'dw_e', 'webhook_deploy' => true));
+        $repo = Mockery::mock(DeploymentRepositoryInterface::class);
+        $repo->shouldReceive('all')->andReturn(array('dw_e' => $deployment));
+        $github = Mockery::mock(GitHubClientInterface::class);
+        $github->shouldNotReceive('resolveSha');
+        $scheduler = Mockery::mock(DeploySchedulerInterface::class);
+        $scheduler->shouldNotReceive('schedule');
+
+        Functions\expect('get_option')->once()
+            ->with(CronPoller::LAST_POLLS_OPTION, array())
+            ->andReturn(array('dw_e' => 123456789));
+        Functions\expect('update_option')->once()->with(
+            CronPoller::LAST_POLLS_OPTION,
+            Mockery::on(function ($payload) {
+                return is_array($payload) && ! array_key_exists('dw_e', $payload);
+            }),
+            false
+        );
+
+        (new CronPoller($repo, $github, $scheduler))->poll();
+    }
+
     public function test_enabled_and_never_polled_is_polled_and_timestamp_recorded(): void
     {
         $now = 5000000000;
         Functions\when('time')->justReturn($now);
 
         $deployment = $this->deployment(array(
-            'id' => 'dw_b', 'auto_deploy' => true, 'poll_interval' => 5, 'last_deployed_sha' => 'samesha',
+            'id' => 'dw_b', 'poll_deploy' => true, 'poll_interval' => 5, 'last_deployed_sha' => 'samesha',
         ));
         $repo = Mockery::mock(DeploymentRepositoryInterface::class);
         $repo->shouldReceive('all')->andReturn(array('dw_b' => $deployment));
@@ -148,7 +172,7 @@ final class CronPollerTest extends TestCase
         Functions\when('time')->justReturn($now);
 
         $deployment = $this->deployment(array(
-            'id' => 'dw_c', 'auto_deploy' => true, 'poll_interval' => 15,
+            'id' => 'dw_c', 'poll_deploy' => true, 'poll_interval' => 15,
         ));
         $repo = Mockery::mock(DeploymentRepositoryInterface::class);
         $repo->shouldReceive('all')->andReturn(array('dw_c' => $deployment));
@@ -172,7 +196,7 @@ final class CronPollerTest extends TestCase
         Functions\when('time')->justReturn($now);
 
         $deployment = $this->deployment(array(
-            'id' => 'dw_d', 'auto_deploy' => true, 'poll_interval' => 15, 'last_deployed_sha' => 'samesha',
+            'id' => 'dw_d', 'poll_deploy' => true, 'poll_interval' => 15, 'last_deployed_sha' => 'samesha',
         ));
         $repo = Mockery::mock(DeploymentRepositoryInterface::class);
         $repo->shouldReceive('all')->andReturn(array('dw_d' => $deployment));
