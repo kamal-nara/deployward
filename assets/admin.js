@@ -9,6 +9,9 @@
      ---------------------------------------------------------------------- */
 
   var LOG_PAGE_SIZE = 20;
+  var NEW_TOKEN_PLACEHOLDER = 'ghp_...';
+  var TOKEN_MASK = '\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022';
+  var TOKEN_HINT_MASK = '\u2022\u2022\u2022\u2022';
 
   /* -------------------------------------------------------------------------
      Bootstrap
@@ -408,7 +411,6 @@
 
   function tokenChipState(d) {
     const status = d.token_status;
-    const hint = d.token_last4 ? ' \u2022\u2022\u2022\u2022' + d.token_last4 : '';
     if (!status || status === 'none') { return null; }
     if (status === 'rejected')   { return { cls: 'is-bad',  label: 'Token rejected by GitHub' }; }
     if (status === 'missing')    { return { cls: 'is-bad',  label: 'No token' }; }
@@ -419,7 +421,11 @@
       return { cls: 'is-warn', label: days === 1 ? 'Token expires in 1 day' : 'Token expires in ' + days + ' days' };
     }
     const expiry = formatExpiry(d.token_expires_at);
-    return { cls: 'is-neutral', label: 'Token' + hint + (expiry ? ', expires ' + expiry : '') };
+    return { cls: 'is-neutral', label: savedTokenLabel(d) + (expiry ? ', expires ' + expiry : '') };
+  }
+
+  function savedTokenLabel(d) {
+    return d.token_last4 ? 'Token ' + TOKEN_HINT_MASK + d.token_last4 : 'Token saved';
   }
 
   function daysUntil(iso) {
@@ -846,9 +852,9 @@
     const tokenInput = tokenField.input;
     tokenInput.className = 'dw-input';
     tokenInput.type = 'password';
-    tokenInput.placeholder = isEdit ? savedTokenPlaceholder(d) : 'ghp_...';
+    tokenInput.placeholder = isEdit ? savedTokenPlaceholder(d) : NEW_TOKEN_PLACEHOLDER;
     tokenInput.autocomplete = 'off';
-    if (isEdit && d.token_last4) {
+    if (isEdit && d.has_token) {
       tokenField.wrapper.appendChild(buildRemoveTokenBlock(tokenInput));
     }
     form.appendChild(tokenField.wrapper);
@@ -1009,8 +1015,8 @@
   }
 
   function savedTokenPlaceholder(d) {
-    if (!d.token_last4) { return 'Leave blank to keep the saved token'; }
-    return 'Saved token: \u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022' + d.token_last4 + ' (leave blank to keep it)';
+    if (!d.has_token) { return NEW_TOKEN_PLACEHOLDER; }
+    return 'Saved token: ' + TOKEN_MASK + (d.token_last4 || '') + ' (leave blank to keep it)';
   }
 
   function buildRemoveTokenBlock(tokenInput) {

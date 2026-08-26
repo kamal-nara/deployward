@@ -293,6 +293,14 @@ final class DeploymentTest extends TestCase
         $this->assertSame('saved', $d->tokenStatus());
     }
 
+    public function test_a_token_saved_before_0_5_0_counts_as_saved(): void
+    {
+        $d = Deployment::fromArray($this->validData(array('token' => 'ghp_from_0_4_x', 'token_last4' => '')));
+
+        $this->assertSame('saved', $d->tokenStatus());
+        $this->assertSame('', $d->tokenLast4());
+    }
+
     public function test_with_token_expiry_returns_a_new_instance(): void
     {
         $d = Deployment::fromArray($this->validData());
