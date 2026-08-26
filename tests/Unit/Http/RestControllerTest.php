@@ -78,6 +78,22 @@ final class RestControllerTest extends TestCase
         $this->assertSame('saved', $row['token_status']);
     }
 
+    public function test_list_reports_has_token_for_a_row_whose_token_cannot_be_decrypted(): void
+    {
+        $unreadable = Deployment::fromArray(array_merge(
+            $this->deployment()->toArray(),
+            array('token' => '', 'token_last4' => 'abcd', 'token_unreadable' => true)
+        ));
+        $repo = Mockery::mock(DeploymentRepositoryInterface::class);
+        $repo->shouldReceive('all')->andReturn(array('dw_1' => $unreadable));
+
+        $row = $this->controller($repo)->listDeployments()->data()['deployments'][0];
+
+        $this->assertTrue($row['has_token']);
+        $this->assertSame('unreadable', $row['token_status']);
+        $this->assertArrayNotHasKey('token', $row);
+    }
+
     public function test_save_creates_with_generated_id_and_secret(): void
     {
         $repo = Mockery::mock(DeploymentRepositoryInterface::class);

@@ -28,7 +28,10 @@ final class AdminPage
         $theme = \Deployward\Http\PreferencesController::sanitizeTheme(
             get_user_meta(get_current_user_id(), \Deployward\Http\PreferencesController::META_KEY, true)
         );
-        echo '<div class="wrap"><div id="deployward-app" '
+        echo '<div class="wrap">'
+            . '<h1 class="screen-reader-text">Deployward</h1>'
+            . '<hr class="wp-header-end">'
+            . '<div id="deployward-app" '
             . 'data-root="' . esc_attr(esc_url_raw(rest_url('deployward/v1/'))) . '" '
             . 'data-nonce="' . esc_attr(wp_create_nonce('wp_rest')) . '" '
             . 'data-theme="' . esc_attr($theme) . '">'

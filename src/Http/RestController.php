@@ -271,7 +271,7 @@ final class RestController
             'target_type' => $deployment->targetType(),
             'target_slug' => $deployment->targetSlug(),
             'last_deployed_sha' => $deployment->lastDeployedSha(),
-            'has_token' => $deployment->token() !== '',
+            'has_token' => $deployment->token() !== '' || $deployment->isTokenUnreadable(),
             'token_last4' => $deployment->tokenLast4(),
             'token_status' => $deployment->tokenStatus(),
             'token_expires_at' => $deployment->tokenExpiresAt(),

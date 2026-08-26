@@ -1014,6 +1014,7 @@
   }
 
   function savedTokenPlaceholder(d) {
+    if (d.token_status === 'unreadable') { return 'Saved token could not be read, paste it again'; }
     if (!d.has_token) { return NEW_TOKEN_PLACEHOLDER; }
     return 'Saved token: ' + TOKEN_MASK + (d.token_last4 || '') + ' (leave blank to keep it)';
   }
