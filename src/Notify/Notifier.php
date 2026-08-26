@@ -2,21 +2,37 @@
 
 namespace Deployward\Notify;
 
+use Deployward\Config\SettingsRepository;
+
 final class Notifier implements NotifierInterface
 {
-    /** @var string */
-    private $to;
+    /** @var SettingsRepository */
+    private $settings;
 
-    public function __construct(string $to)
+    public function __construct(SettingsRepository $settings)
     {
-        $this->to = $to;
+        $this->settings = $settings;
     }
 
-    public function notify(string $subject, string $body): void
+    public function notify(string $subject, string $body, string $kind = self::KIND_FAILURE): void
     {
-        if ($this->to === '') {
+        if (! $this->shouldSend($kind)) {
             return;
         }
-        wp_mail($this->to, $subject, $body);
+        $recipients = $this->settings->recipients();
+        if ($recipients === array()) {
+            return;
+        }
+        wp_mail($recipients, $subject, $body);
+    }
+
+    private function shouldSend(string $kind): bool
+    {
+        $settings = $this->settings->get();
+        if ($kind === self::KIND_SUCCESS) {
+            return $settings->shouldEmailOnSuccess();
+        }
+
+        return $settings->shouldEmailOnFailure();
     }
 }

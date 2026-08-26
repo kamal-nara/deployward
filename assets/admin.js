@@ -89,7 +89,7 @@
   };
 
   DeploywardApp.prototype.switchTab = function (tabId) {
-    const validTabs = ['deployments', 'add-deployment', 'activity-log', 'getting-started'];
+    const validTabs = ['deployments', 'add-deployment', 'activity-log', 'settings', 'getting-started'];
     const id = validTabs.includes(tabId) ? tabId : 'deployments';
 
     if (this.activeTab === id && id !== 'deployments' && id !== 'activity-log') { return; }
@@ -107,6 +107,7 @@
     if (id === 'deployments')     { renderDeployments(this); }
     if (id === 'add-deployment')  { renderAddDeployment(this); }
     if (id === 'activity-log')    { renderActivityLog(this); }
+    if (id === 'settings')        { renderSettings(this); }
     if (id === 'getting-started') { renderGettingStarted(this); }
   };
 
@@ -122,6 +123,7 @@
       { id: 'deployments',     label: 'Deployments' },
       { id: 'add-deployment',  label: 'Add Deployment' },
       { id: 'activity-log',    label: 'Activity Log' },
+      { id: 'settings',        label: 'Settings' },
       { id: 'getting-started', label: 'Getting Started' },
     ];
 
@@ -1257,6 +1259,126 @@
     pager.appendChild(label);
     pager.appendChild(nextBtn);
     return pager;
+  }
+
+  /* -------------------------------------------------------------------------
+     Settings tab
+     ---------------------------------------------------------------------- */
+
+  function renderSettings(app) {
+    const wrap = el('div');
+    wrap.className = 'dw-card';
+
+    const heading = el('h2');
+    heading.textContent = 'Settings';
+    wrap.appendChild(heading);
+
+    const body = el('div');
+    wrap.appendChild(body);
+    body.appendChild(buildSkeleton());
+    app.panelWrap.appendChild(wrap);
+
+    app.api('GET', 'settings').then(function (res) {
+      clearEl(body);
+      if (res.status !== 200) {
+        body.appendChild(buildToastEl('is-error', (res.data && res.data.error) || 'Failed to load settings.'));
+        return;
+      }
+      body.appendChild(buildSettingsForm(app, res.data));
+    }).catch(function () {
+      clearEl(body);
+      body.appendChild(buildToastEl('is-error', 'Network error loading settings.'));
+    });
+  }
+
+  function buildSettingsForm(app, data) {
+    const settings = data.settings || {};
+    const form = el('div');
+    form.className = 'dw-form';
+
+    const field = el('div');
+    field.className = 'dw-field';
+    const label = el('label');
+    label.className = 'dw-label';
+    label.htmlFor = 'dw-alert-recipients';
+    label.textContent = 'Alert recipients';
+    field.appendChild(label);
+
+    const textarea = el('textarea');
+    textarea.className = 'dw-textarea';
+    textarea.id = 'dw-alert-recipients';
+    textarea.rows = 2;
+    textarea.value = settings.alert_recipients || '';
+    textarea.placeholder = 'ops@example.com, lead@example.com';
+    field.appendChild(textarea);
+
+    const help = el('p');
+    help.className = 'dw-help';
+    help.textContent = 'Comma-separated. Leave empty to use the site admin e-mail: ' + (data.admin_email || '');
+    field.appendChild(help);
+    form.appendChild(field);
+
+    const failure = buildTriggerCheckbox('dw-email-failure', 'E-mail me when a deploy fails', settings.email_on_failure !== false);
+    const success = buildTriggerCheckbox('dw-email-success', 'E-mail me when a deploy succeeds', settings.email_on_success !== false);
+    form.appendChild(failure.row);
+    form.appendChild(success.row);
+
+    const errorArea = el('div');
+    form.appendChild(errorArea);
+
+    const actions = el('div');
+    actions.className = 'dw-form__actions';
+    actions.appendChild(buildSettingsSaveBtn(app, textarea, failure.input, success.input, errorArea));
+    actions.appendChild(buildTestEmailBtn(app));
+    form.appendChild(actions);
+
+    return form;
+  }
+
+  function buildSettingsSaveBtn(app, textarea, failureInput, successInput, errorArea) {
+    const btn = elBtn('Save settings', 'dw-btn--primary');
+    btn.addEventListener('click', function () {
+      clearEl(errorArea);
+      setInFlight(btn, true);
+      app.api('POST', 'settings', {
+        alert_recipients: textarea.value.trim(),
+        email_on_failure: failureInput.checked,
+        email_on_success: successInput.checked,
+      }).then(function (res) {
+        setInFlight(btn, false);
+        if (res.status === 200) {
+          app.showToast('is-ok', 'Settings saved.');
+          return;
+        }
+        const inlineErr = el('p');
+        inlineErr.className = 'dw-error';
+        inlineErr.textContent = (res.data && res.data.error) || 'Save failed.';
+        errorArea.appendChild(inlineErr);
+      }).catch(function () {
+        setInFlight(btn, false);
+        app.showToast('is-error', 'Network error saving settings.');
+      });
+    });
+    return btn;
+  }
+
+  function buildTestEmailBtn(app) {
+    const btn = elBtn('Send test e-mail', '');
+    btn.addEventListener('click', function () {
+      setInFlight(btn, true);
+      app.api('POST', 'settings/test-email').then(function (res) {
+        setInFlight(btn, false);
+        if (res.status === 200) {
+          app.showToast('is-ok', 'Sent to ' + (res.data.sent_to || []).join(', '));
+          return;
+        }
+        app.showToast('is-error', (res.data && res.data.error) || 'Could not send the test e-mail.');
+      }).catch(function () {
+        setInFlight(btn, false);
+        app.showToast('is-error', 'Network error sending the test e-mail.');
+      });
+    });
+    return btn;
   }
 
   /* -------------------------------------------------------------------------

@@ -4,6 +4,7 @@ namespace Deployward;
 
 use Deployward\Config\DeploymentRepository;
 use Deployward\Config\DeploymentRepositoryInterface;
+use Deployward\Config\SettingsRepository;
 use Deployward\Deploy\BackupManager;
 use Deployward\Deploy\Deployer;
 use Deployward\Deploy\DeployerInterface;
@@ -17,6 +18,7 @@ use Deployward\GitHub\GitHubClientInterface;
 use Deployward\Log\DeployLog;
 use Deployward\Log\DeployLogInterface;
 use Deployward\Notify\Notifier;
+use Deployward\Notify\NotifierInterface;
 use Deployward\Security\Encryptor;
 
 final class Container
@@ -32,6 +34,16 @@ final class Container
     public function repository(): DeploymentRepositoryInterface
     {
         return new DeploymentRepository(Encryptor::fromSalts());
+    }
+
+    public function settings(): SettingsRepository
+    {
+        return new SettingsRepository();
+    }
+
+    public function notifier(): NotifierInterface
+    {
+        return new Notifier($this->settings());
     }
 
     public function log(): DeployLogInterface
@@ -64,7 +76,7 @@ final class Container
             new MaintenanceMode(ABSPATH),
             $this->log(),
             $this->repository(),
-            new Notifier((string) get_option('admin_email', '')),
+            $this->notifier(),
             array(
                 'plugin' => WP_PLUGIN_DIR,
                 'theme' => get_theme_root(),

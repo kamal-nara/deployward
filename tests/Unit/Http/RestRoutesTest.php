@@ -51,7 +51,8 @@ final class RestRoutesTest extends TestCase
         $routes = new RestRoutes(
             $this->makeRestController(),
             $this->makeWebhookController(),
-            new \Deployward\Http\PreferencesController()
+            new \Deployward\Http\PreferencesController(),
+            $this->makeSettingsController()
         );
         $wp = $routes->respond(ApiResponse::error('nope', 404));
 
@@ -64,7 +65,8 @@ final class RestRoutesTest extends TestCase
         $routes = new RestRoutes(
             $this->makeRestController(),
             $this->makeWebhookController(),
-            new \Deployward\Http\PreferencesController()
+            new \Deployward\Http\PreferencesController(),
+            $this->makeSettingsController()
         );
 
         $this->assertInstanceOf(RestRoutes::class, $routes);
@@ -81,7 +83,8 @@ final class RestRoutesTest extends TestCase
         $routes = new RestRoutes(
             $this->makeRestController(),
             $this->makeWebhookController(),
-            new \Deployward\Http\PreferencesController()
+            new \Deployward\Http\PreferencesController(),
+            $this->makeSettingsController()
         );
         $routes->register();
 
@@ -104,6 +107,11 @@ final class RestRoutesTest extends TestCase
             Mockery::mock(DeployLogInterface::class),
             Mockery::mock(GitHubClientInterface::class)
         );
+    }
+
+    private function makeSettingsController(): \Deployward\Http\SettingsController
+    {
+        return new \Deployward\Http\SettingsController(new \Deployward\Config\SettingsRepository());
     }
 
     private function makeWebhookController(): WebhookController

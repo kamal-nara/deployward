@@ -9,6 +9,7 @@ use Deployward\Deploy\DeployScheduler;
 use Deployward\Http\PreferencesController;
 use Deployward\Http\RestController;
 use Deployward\Http\RestRoutes;
+use Deployward\Http\SettingsController;
 use Deployward\Http\WebhookController;
 use Deployward\Log\DeployLog;
 use Deployward\Security\SignatureVerifier;
@@ -63,7 +64,8 @@ final class Plugin
                 $container->github()
             ),
             new WebhookController($container->repository(), new SignatureVerifier(), $scheduler),
-            new PreferencesController()
+            new PreferencesController(),
+            new SettingsController($container->settings())
         );
         add_action('rest_api_init', array($routes, 'register'));
 

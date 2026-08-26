@@ -15,11 +15,19 @@ final class RestRoutes
     /** @var PreferencesController */
     private $preferences;
 
-    public function __construct(RestController $controller, WebhookController $webhook, PreferencesController $preferences)
-    {
+    /** @var SettingsController */
+    private $settings;
+
+    public function __construct(
+        RestController $controller,
+        WebhookController $webhook,
+        PreferencesController $preferences,
+        SettingsController $settings
+    ) {
         $this->controller = $controller;
         $this->webhook = $webhook;
         $this->preferences = $preferences;
+        $this->settings = $settings;
     }
 
     public static function canManage(): bool
@@ -115,6 +123,31 @@ final class RestRoutes
                     $request->get_header('x-hub-signature-256'),
                     $request->get_header('x-github-event')
                 ));
+            },
+        ));
+
+        register_rest_route(self::NAMESPACE, '/settings', array(
+            array(
+                'methods' => 'GET',
+                'permission_callback' => $permission,
+                'callback' => function () {
+                    return $this->respond($this->settings->get());
+                },
+            ),
+            array(
+                'methods' => 'POST',
+                'permission_callback' => $permission,
+                'callback' => function ($request) {
+                    return $this->respond($this->settings->save($this->params($request)));
+                },
+            ),
+        ));
+
+        register_rest_route(self::NAMESPACE, '/settings/test-email', array(
+            'methods' => 'POST',
+            'permission_callback' => $permission,
+            'callback' => function () {
+                return $this->respond($this->settings->sendTest());
             },
         ));
 

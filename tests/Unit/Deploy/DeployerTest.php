@@ -336,7 +336,7 @@ final class DeployerTest extends TestCase
         );
 
         $notifier = Mockery::mock(NotifierInterface::class);
-        $notifier->shouldReceive('notify')->once();
+        $notifier->shouldReceive('notify')->once()->with(Mockery::any(), Mockery::any(), 'success');
 
         $repository = Mockery::mock(DeploymentRepositoryInterface::class);
         $repository->shouldReceive('save')->once()->with(
@@ -355,6 +355,21 @@ final class DeployerTest extends TestCase
 
         $this->assertTrue($result->isOk());
         $this->assertFalse($result->isSkipped());
+    }
+
+    public function test_notifies_with_the_failure_kind_when_the_deploy_fails(): void
+    {
+        $github = Mockery::mock(GitHubClientInterface::class);
+        $github->shouldReceive('resolveSha')->once()->andReturn(Result::fail('GitHub returned HTTP 401'));
+        $log = Mockery::mock(DeployLogInterface::class);
+        $log->shouldReceive('record')->once();
+        $notifier = Mockery::mock(NotifierInterface::class);
+        $notifier->shouldReceive('notify')->once()->with(Mockery::any(), Mockery::any(), 'failure');
+        $mocks = $this->baseMocks(array('github' => $github, 'log' => $log, 'notifier' => $notifier));
+
+        $result = $this->deployer($mocks)->deploy($this->deployment(), 'cron');
+
+        $this->assertFalse($result->isOk());
     }
 
     private function baseMocks(array $overrides): array

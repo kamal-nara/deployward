@@ -225,7 +225,8 @@ final class Deployer implements DeployerInterface
         if ($status !== 'skipped') {
             $this->notifier->notify(
                 sprintf('[Deployward] %s: %s', strtoupper($status), $deployment->repo()),
-                $result->message()
+                $result->message(),
+                $status === 'success' ? NotifierInterface::KIND_SUCCESS : NotifierInterface::KIND_FAILURE
             );
         }
 
