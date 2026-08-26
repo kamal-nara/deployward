@@ -1165,6 +1165,57 @@
   border: 1px solid var(--dw-border);
 }
 
+.dw-pill--token.is-neutral {
+  background: var(--dw-bg);
+  color: var(--dw-muted);
+  border: 1px solid var(--dw-border);
+}
+
+.dw-pill--token.is-warn {
+  background: var(--dw-warn-bg);
+  color: var(--dw-warn);
+}
+
+.dw-pill--token.is-bad {
+  background: var(--dw-danger-bg);
+  color: var(--dw-danger);
+}
+
+.dw-token-remove {
+  margin-top: 6px;
+  font-size: 0.85em;
+}
+
+.dw-token-remove__confirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: var(--dw-muted);
+}
+
+.dw-btn--link {
+  background: none;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+  min-width: 0;
+  color: var(--dw-accent);
+  text-decoration: underline;
+  font-size: inherit;
+}
+
+.dw-btn--link:hover {
+  background: none;
+  color: var(--dw-accent);
+  opacity: 0.8;
+}
+
+.dw-btn--link.dw-btn--danger {
+  color: var(--dw-danger);
+  background: none;
+}
+
 .dw-pill--mode.is-auto {
   background: var(--dw-accent-soft);
   color: var(--dw-accent);

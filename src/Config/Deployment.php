@@ -7,6 +7,9 @@ final class Deployment
     const TYPES = array('plugin', 'theme', 'mu-plugin');
     const VISIBILITIES = array('public', 'private');
     const POLL_INTERVALS = array(5, 15, 30, 60);
+    const EXPIRY_WARNING_DAYS = 14;
+    const LAST4_MIN_TOKEN_LENGTH = 8;
+    const TOKEN_FIELDS = array('token_last4', 'token_expires_at', 'token_checked_at', 'token_alerted');
 
     /** @var string */
     private $id;
@@ -32,6 +35,8 @@ final class Deployment
     private $pollDeploy;
     /** @var int */
     private $pollInterval;
+    /** @var array */
+    private $tokenState;
 
     public function __construct(
         string $id,
@@ -45,7 +50,8 @@ final class Deployment
         string $lastDeployedSha,
         bool $webhookDeploy = false,
         bool $pollDeploy = false,
-        int $pollInterval = 5
+        int $pollInterval = 5,
+        array $tokenState = array()
     ) {
         $this->id = $id;
         $this->repo = $repo;
@@ -59,6 +65,17 @@ final class Deployment
         $this->webhookDeploy = $webhookDeploy;
         $this->pollDeploy = $pollDeploy;
         $this->pollInterval = $pollInterval;
+        $this->tokenState = self::normalizeTokenState($tokenState);
+    }
+
+    private static function normalizeTokenState(array $state): array
+    {
+        $out = array('token_unreadable' => ! empty($state['token_unreadable']));
+        foreach (self::TOKEN_FIELDS as $key) {
+            $out = array_merge($out, array($key => isset($state[$key]) ? (string) $state[$key] : ''));
+        }
+
+        return $out;
     }
 
     public static function normalizeRepo(string $input): string
@@ -140,13 +157,14 @@ final class Deployment
             isset($data['last_deployed_sha']) ? (string) $data['last_deployed_sha'] : '',
             $webhook,
             $poll,
-            $interval
+            $interval,
+            $data
         );
     }
 
     public function toArray(): array
     {
-        return array(
+        return array_merge(array(
             'id' => $this->id,
             'repo' => $this->repo,
             'branch' => $this->branch,
@@ -159,7 +177,7 @@ final class Deployment
             'webhook_deploy' => $this->webhookDeploy,
             'poll_deploy' => $this->pollDeploy,
             'poll_interval' => $this->pollInterval,
-        );
+        ), $this->tokenState);
     }
 
     public function id(): string
@@ -228,6 +246,84 @@ final class Deployment
         $next['last_deployed_sha'] = $sha;
 
         return self::fromArray($next);
+    }
+
+    public function tokenLast4(): string
+    {
+        return $this->tokenState['token_last4'];
+    }
+
+    public function isTokenUnreadable(): bool
+    {
+        return $this->tokenState['token_unreadable'];
+    }
+
+    public function tokenExpiresAt(): string
+    {
+        return $this->tokenState['token_expires_at'];
+    }
+
+    public function tokenCheckedAt(): string
+    {
+        return $this->tokenState['token_checked_at'];
+    }
+
+    public function tokenAlerted(): string
+    {
+        return $this->tokenState['token_alerted'];
+    }
+
+    public function tokenStatus(?\DateTimeImmutable $now = null): string
+    {
+        if ($this->visibility !== 'private') {
+            return 'none';
+        }
+        if ($this->isTokenUnreadable()) {
+            return 'unreadable';
+        }
+        if ($this->token === '' && $this->tokenLast4() === '') {
+            return 'missing';
+        }
+        $expires = self::parseTimestamp($this->tokenExpiresAt());
+        if ($expires === null) {
+            return 'saved';
+        }
+        $moment = $now !== null ? $now : new \DateTimeImmutable('now', new \DateTimeZone('UTC'));
+        if ($expires <= $moment) {
+            return 'expired';
+        }
+
+        return $expires <= $moment->add(new \DateInterval('P' . self::EXPIRY_WARNING_DAYS . 'D')) ? 'expiring' : 'saved';
+    }
+
+    public static function last4(string $token): string
+    {
+        return strlen($token) >= self::LAST4_MIN_TOKEN_LENGTH ? substr($token, -4) : '';
+    }
+
+    public static function parseTimestamp(string $value): ?\DateTimeImmutable
+    {
+        if (trim($value) === '') {
+            return null;
+        }
+        try {
+            return new \DateTimeImmutable($value);
+        } catch (\Exception $e) {
+            return null;
+        }
+    }
+
+    public function withTokenExpiry(string $expiresAt, string $checkedAt): self
+    {
+        return self::fromArray(array_merge($this->toArray(), array(
+            'token_expires_at' => $expiresAt,
+            'token_checked_at' => $checkedAt,
+        )));
+    }
+
+    public function withTokenAlerted(string $alerted): self
+    {
+        return self::fromArray(array_merge($this->toArray(), array('token_alerted' => $alerted)));
     }
 
     public function withToken(string $token): self

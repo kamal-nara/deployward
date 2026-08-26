@@ -205,4 +205,111 @@ final class DeploymentTest extends TestCase
         $this->assertTrue($next->deploysOnSchedule());
         $this->assertSame(30, $next->pollInterval());
     }
+
+    public function test_token_fields_default_to_empty(): void
+    {
+        $d = Deployment::fromArray($this->validData());
+
+        $this->assertSame('', $d->tokenLast4());
+        $this->assertFalse($d->isTokenUnreadable());
+        $this->assertSame('', $d->tokenExpiresAt());
+        $this->assertSame('', $d->tokenCheckedAt());
+        $this->assertSame('', $d->tokenAlerted());
+    }
+
+    public function test_to_array_carries_the_token_fields(): void
+    {
+        $data = Deployment::fromArray($this->validData(array(
+            'token_last4' => 'abcd',
+            'token_expires_at' => '2026-09-26T12:34:56+00:00',
+            'token_checked_at' => '2026-08-26T00:00:00+00:00',
+            'token_alerted' => '14d',
+        )))->toArray();
+
+        $this->assertSame('abcd', $data['token_last4']);
+        $this->assertSame('2026-09-26T12:34:56+00:00', $data['token_expires_at']);
+        $this->assertSame('2026-08-26T00:00:00+00:00', $data['token_checked_at']);
+        $this->assertSame('14d', $data['token_alerted']);
+    }
+
+    public function test_token_status_is_none_for_a_public_repo(): void
+    {
+        $d = Deployment::fromArray($this->validData(array('visibility' => 'public', 'token' => '')));
+
+        $this->assertSame('none', $d->tokenStatus());
+    }
+
+    public function test_token_status_is_missing_for_a_private_repo_without_a_token(): void
+    {
+        $d = Deployment::fromArray($this->validData(array('token' => '')));
+
+        $this->assertSame('missing', $d->tokenStatus());
+    }
+
+    public function test_token_status_is_unreadable_when_decryption_failed(): void
+    {
+        $d = Deployment::fromArray($this->validData(array('token' => '', 'token_unreadable' => true)));
+
+        $this->assertSame('unreadable', $d->tokenStatus());
+    }
+
+    public function test_token_status_is_saved_without_a_known_expiry(): void
+    {
+        $this->assertSame('saved', Deployment::fromArray($this->validData())->tokenStatus());
+    }
+
+    public function test_token_status_is_expired_when_the_expiry_has_passed(): void
+    {
+        $d = Deployment::fromArray($this->validData(array('token_expires_at' => '2026-08-01T00:00:00+00:00')));
+
+        $this->assertSame('expired', $d->tokenStatus(new \DateTimeImmutable('2026-08-26T00:00:00+00:00')));
+    }
+
+    public function test_token_status_is_expiring_inside_the_warning_window(): void
+    {
+        $d = Deployment::fromArray($this->validData(array('token_expires_at' => '2026-08-31T00:00:00+00:00')));
+
+        $this->assertSame('expiring', $d->tokenStatus(new \DateTimeImmutable('2026-08-26T00:00:00+00:00')));
+    }
+
+    public function test_token_status_is_saved_outside_the_warning_window(): void
+    {
+        $d = Deployment::fromArray($this->validData(array('token_expires_at' => '2026-09-26T00:00:00+00:00')));
+
+        $this->assertSame('saved', $d->tokenStatus(new \DateTimeImmutable('2026-08-26T00:00:00+00:00')));
+    }
+
+    public function test_token_status_ignores_an_unparseable_expiry(): void
+    {
+        $d = Deployment::fromArray($this->validData(array('token_expires_at' => 'whenever')));
+
+        $this->assertSame('saved', $d->tokenStatus(new \DateTimeImmutable('2026-08-26T00:00:00+00:00')));
+    }
+
+    public function test_token_status_uses_last4_when_the_token_is_not_loaded(): void
+    {
+        $d = Deployment::fromArray($this->validData(array('token' => '', 'token_last4' => 'abcd')));
+
+        $this->assertSame('saved', $d->tokenStatus());
+    }
+
+    public function test_with_token_expiry_returns_a_new_instance(): void
+    {
+        $d = Deployment::fromArray($this->validData());
+        $next = $d->withTokenExpiry('2026-09-26T12:34:56+00:00', '2026-08-26T09:00:00+00:00');
+
+        $this->assertSame('', $d->tokenExpiresAt());
+        $this->assertSame('2026-09-26T12:34:56+00:00', $next->tokenExpiresAt());
+        $this->assertSame('2026-08-26T09:00:00+00:00', $next->tokenCheckedAt());
+        $this->assertSame('ghp_x', $next->token());
+    }
+
+    public function test_with_token_alerted_returns_a_new_instance(): void
+    {
+        $d = Deployment::fromArray($this->validData(array('token_alerted' => '14d')));
+        $next = $d->withTokenAlerted('14d,1d');
+
+        $this->assertSame('14d', $d->tokenAlerted());
+        $this->assertSame('14d,1d', $next->tokenAlerted());
+    }
 }

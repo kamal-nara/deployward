@@ -69,7 +69,7 @@ final class RestControllerTest extends TestCase
     public function test_save_creates_with_generated_id_and_secret(): void
     {
         $repo = Mockery::mock(DeploymentRepositoryInterface::class);
-        $repo->shouldReceive('save')->once()->with(Mockery::type(Deployment::class));
+        $repo->shouldReceive('save')->once()->with(Mockery::type(Deployment::class), false);
 
         $response = $this->controller($repo)->saveDeployment(array(
             'repo' => 'Nara-IT/nara-core', 'branch' => 'main', 'visibility' => 'public',
@@ -99,7 +99,7 @@ final class RestControllerTest extends TestCase
         $repo->shouldReceive('find')->with('dw_1')->andReturn($this->deployment('ghp_existing'));
         $repo->shouldReceive('save')->once()->with(Mockery::on(function ($d) {
             return $d->token() === 'ghp_existing' && $d->webhookSecret() === 'whsec';
-        }));
+        }), false);
 
         $response = $this->controller($repo)->saveDeployment(array(
             'id' => 'dw_1', 'repo' => 'Nara-IT/nara-core', 'branch' => 'develop',
@@ -108,6 +108,82 @@ final class RestControllerTest extends TestCase
         ));
 
         $this->assertSame(200, $response->status());
+    }
+
+    public function test_present_carries_the_token_hint_but_never_the_token(): void
+    {
+        $deployment = Deployment::fromArray(array(
+            'id' => 'dw_1', 'repo' => 'Nara-IT/nara-core', 'branch' => 'main',
+            'visibility' => 'private', 'target_type' => 'plugin', 'target_slug' => 'nara-core',
+            'token' => 'ghp_supersecret', 'webhook_secret' => 'whsec',
+            'token_last4' => 'cret', 'token_expires_at' => '2026-09-26T12:34:56+00:00',
+            'token_checked_at' => '2026-08-26T09:00:00+00:00',
+        ));
+        $repo = Mockery::mock(DeploymentRepositoryInterface::class);
+        $repo->shouldReceive('all')->andReturn(array('dw_1' => $deployment));
+
+        $row = $this->controller($repo)->listDeployments()->data()['deployments'][0];
+
+        $this->assertSame('cret', $row['token_last4']);
+        $this->assertSame('2026-09-26T12:34:56+00:00', $row['token_expires_at']);
+        $this->assertSame('2026-08-26T09:00:00+00:00', $row['token_checked_at']);
+        $this->assertArrayHasKey('token_status', $row);
+        $this->assertArrayNotHasKey('token', $row);
+        $this->assertStringNotContainsString('ghp_supersecret', wp_json_encode_safe($row));
+    }
+
+    public function test_save_passes_clear_token_through_to_the_repository(): void
+    {
+        $repo = Mockery::mock(DeploymentRepositoryInterface::class);
+        $repo->shouldReceive('find')->with('dw_1')->andReturn($this->deployment('ghp_existing'));
+        $repo->shouldReceive('save')->once()->with(Mockery::type(Deployment::class), true);
+
+        $response = $this->controller($repo)->saveDeployment(array(
+            'id' => 'dw_1', 'repo' => 'Nara-IT/nara-core', 'branch' => 'main',
+            'visibility' => 'private', 'target_type' => 'plugin', 'target_slug' => 'nara-core',
+            'token' => '', 'clear_token' => true,
+        ));
+
+        $this->assertSame(200, $response->status());
+    }
+
+    public function test_save_keeps_the_stored_token_hint_when_the_field_is_left_blank(): void
+    {
+        $existing = Deployment::fromArray(array(
+            'id' => 'dw_1', 'repo' => 'Nara-IT/nara-core', 'branch' => 'main',
+            'visibility' => 'private', 'target_type' => 'plugin', 'target_slug' => 'nara-core',
+            'token' => 'ghp_existing', 'webhook_secret' => 'whsec', 'token_last4' => 'ting',
+            'token_expires_at' => '2026-09-26T12:34:56+00:00',
+        ));
+        $repo = Mockery::mock(DeploymentRepositoryInterface::class);
+        $repo->shouldReceive('find')->with('dw_1')->andReturn($existing);
+        $repo->shouldReceive('save')->once()->with(Mockery::on(function ($d) {
+            return $d->tokenLast4() === 'ting' && $d->tokenExpiresAt() === '2026-09-26T12:34:56+00:00';
+        }), false);
+
+        $response = $this->controller($repo)->saveDeployment(array(
+            'id' => 'dw_1', 'repo' => 'Nara-IT/nara-core', 'branch' => 'develop',
+            'visibility' => 'private', 'target_type' => 'plugin', 'target_slug' => 'nara-core',
+            'token' => '',
+        ));
+
+        $this->assertSame('ting', $response->data()['deployment']['token_last4']);
+    }
+
+    public function test_save_with_a_new_token_reports_its_last_four_characters(): void
+    {
+        $repo = Mockery::mock(DeploymentRepositoryInterface::class);
+        $repo->shouldReceive('find')->with('dw_1')->andReturn($this->deployment('ghp_old'));
+        $repo->shouldReceive('save')->once()->with(Mockery::type(Deployment::class), false);
+
+        $response = $this->controller($repo)->saveDeployment(array(
+            'id' => 'dw_1', 'repo' => 'Nara-IT/nara-core', 'branch' => 'main',
+            'visibility' => 'private', 'target_type' => 'plugin', 'target_slug' => 'nara-core',
+            'token' => 'github_pat_brandnew',
+        ));
+
+        $this->assertSame('dnew', $response->data()['deployment']['token_last4']);
+        $this->assertStringNotContainsString('github_pat_brandnew', wp_json_encode_safe($response->data()));
     }
 
     public function test_delete_unknown_returns_404(): void
@@ -222,7 +298,7 @@ final class RestControllerTest extends TestCase
         $repo->shouldReceive('save')->once()->with(Mockery::on(function ($d) use (&$captured) {
             $captured = $d->id();
             return true;
-        }));
+        }), false);
 
         $response = $this->controller($repo)->saveDeployment(array(
             'repo' => 'owner/repo', 'branch' => 'main', 'visibility' => 'public',
@@ -280,7 +356,7 @@ final class RestControllerTest extends TestCase
         $repo = Mockery::mock(DeploymentRepositoryInterface::class);
         $repo->shouldReceive('save')->once()->with(Mockery::on(function ($d) {
             return $d->repo() === 'kamalahmed/licensekit' && $d->targetSlug() === 'licensekit';
-        }));
+        }), false);
         $response = $this->controller($repo)->saveDeployment(array(
             'repo' => 'https://github.com/kamalahmed/licensekit', 'branch' => 'main',
             'visibility' => 'public', 'target_type' => 'plugin',
@@ -293,7 +369,7 @@ final class RestControllerTest extends TestCase
         $repo = Mockery::mock(DeploymentRepositoryInterface::class);
         $repo->shouldReceive('save')->once()->with(Mockery::on(function ($d) {
             return $d->deploysOnPush() === true && $d->deploysOnSchedule() === false && $d->pollInterval() === 15;
-        }));
+        }), false);
 
         $response = $this->controller($repo)->saveDeployment(array(
             'repo' => 'Nara-IT/nara-core', 'branch' => 'main', 'visibility' => 'public',
@@ -309,7 +385,7 @@ final class RestControllerTest extends TestCase
         $repo = Mockery::mock(DeploymentRepositoryInterface::class);
         $repo->shouldReceive('save')->once()->with(Mockery::on(function ($d) {
             return $d->deploysOnPush() === false && $d->deploysOnSchedule() === false && $d->pollInterval() === 5;
-        }));
+        }), false);
 
         $response = $this->controller($repo)->saveDeployment(array(
             'repo' => 'Nara-IT/nara-core', 'branch' => 'main', 'visibility' => 'public',

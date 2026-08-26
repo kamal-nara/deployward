@@ -343,6 +343,8 @@
     mode.className = 'dw-pill dw-pill--mode' + (hasTrigger ? ' is-auto' : '');
     mode.textContent = modeLabel(d);
     head.appendChild(mode);
+    const tokenChip = buildTokenChip(d);
+    if (tokenChip) { head.appendChild(tokenChip); }
     card.appendChild(head);
 
     const meta = el('p');
@@ -391,6 +393,44 @@
   function pillLabel(d) {
     if (!d.last_deployed_sha) { return 'Never deployed'; }
     return 'Deployed';
+  }
+
+  function buildTokenChip(d) {
+    const state = tokenChipState(d);
+    if (!state) { return null; }
+    const chip = el('span');
+    chip.className = 'dw-pill dw-pill--token ' + state.cls;
+    chip.textContent = state.label;
+    chip.dataset.dwTokenChip = '1';
+    return chip;
+  }
+
+  function tokenChipState(d) {
+    const status = d.token_status;
+    const hint = d.token_last4 ? ' \u2022\u2022\u2022\u2022' + d.token_last4 : '';
+    if (!status || status === 'none') { return null; }
+    if (status === 'missing')    { return { cls: 'is-bad',  label: 'No token' }; }
+    if (status === 'unreadable') { return { cls: 'is-bad',  label: 'Token unreadable, enter it again' }; }
+    if (status === 'expired')    { return { cls: 'is-bad',  label: 'Token expired' }; }
+    if (status === 'expiring') {
+      const days = daysUntil(d.token_expires_at);
+      return { cls: 'is-warn', label: days === 1 ? 'Token expires in 1 day' : 'Token expires in ' + days + ' days' };
+    }
+    const expiry = formatExpiry(d.token_expires_at);
+    return { cls: 'is-neutral', label: 'Token' + hint + (expiry ? ', expires ' + expiry : '') };
+  }
+
+  function daysUntil(iso) {
+    const when = iso ? new Date(iso) : null;
+    if (!when || isNaN(when.getTime())) { return 0; }
+    return Math.max(0, Math.ceil((when.getTime() - Date.now()) / 86400000));
+  }
+
+  function formatExpiry(iso) {
+    const when = iso ? new Date(iso) : null;
+    if (!when || isNaN(when.getTime())) { return ''; }
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return when.getUTCDate() + ' ' + months[when.getUTCMonth()] + ' ' + when.getUTCFullYear();
   }
 
   function modeLabel(d) {
@@ -766,8 +806,11 @@
     const tokenInput = tokenField.input;
     tokenInput.className = 'dw-input';
     tokenInput.type = 'password';
-    tokenInput.placeholder = isEdit ? 'Leave blank to keep the saved token' : 'ghp_...';
+    tokenInput.placeholder = isEdit ? savedTokenPlaceholder(d) : 'ghp_...';
     tokenInput.autocomplete = 'off';
+    if (isEdit && d.token_last4) {
+      tokenField.wrapper.appendChild(buildRemoveTokenBlock(tokenInput));
+    }
     form.appendChild(tokenField.wrapper);
 
     /* Branch row */
@@ -925,6 +968,55 @@
     app.panelWrap.appendChild(wrap);
   }
 
+  function savedTokenPlaceholder(d) {
+    if (!d.token_last4) { return 'Leave blank to keep the saved token'; }
+    return 'Saved token: \u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022' + d.token_last4 + ' (leave blank to keep it)';
+  }
+
+  function buildRemoveTokenBlock(tokenInput) {
+    const wrap = el('div');
+    wrap.className = 'dw-token-remove';
+
+    const link = elBtn('Remove saved token', 'dw-btn--link');
+    const confirmRow = el('div');
+    confirmRow.className = 'dw-token-remove__confirm';
+    confirmRow.style.display = 'none';
+
+    const question = el('span');
+    question.textContent = 'Remove the saved token? Deploys of this private repo will fail until you enter a new one.';
+    confirmRow.appendChild(question);
+
+    const yes = elBtn('Yes, remove it', 'dw-btn--link dw-btn--danger');
+    const no = elBtn('Keep it', 'dw-btn--link');
+    confirmRow.appendChild(yes);
+    confirmRow.appendChild(no);
+
+    const done = el('p');
+    done.className = 'dw-help';
+    done.style.display = 'none';
+    done.textContent = 'The saved token will be removed when you save.';
+
+    link.addEventListener('click', function () {
+      link.style.display = 'none';
+      confirmRow.style.display = '';
+    });
+    no.addEventListener('click', function () {
+      confirmRow.style.display = 'none';
+      link.style.display = '';
+    });
+    yes.addEventListener('click', function () {
+      tokenInput.dataset.dwClearToken = '1';
+      tokenInput.value = '';
+      confirmRow.style.display = 'none';
+      done.style.display = '';
+    });
+
+    wrap.appendChild(link);
+    wrap.appendChild(confirmRow);
+    wrap.appendChild(done);
+    return wrap;
+  }
+
   function buildField(id, labelText, required) {
     const wrapper = el('div');
     wrapper.className = 'dw-field';
@@ -1077,6 +1169,7 @@
     body.poll_deploy = document.getElementById('dw-trigger-poll').checked;
     if (editing) { body.id = editing.id; }
     if (token)   { body.token = token; }
+    if (tokenInput.dataset.dwClearToken === '1') { body.clear_token = true; }
 
     setInFlight(submitBtn, true);
 

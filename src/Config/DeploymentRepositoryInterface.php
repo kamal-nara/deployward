@@ -8,7 +8,7 @@ interface DeploymentRepositoryInterface
 
     public function find(string $id): ?Deployment;
 
-    public function save(Deployment $deployment): void;
+    public function save(Deployment $deployment, bool $clearToken = false): void;
 
     public function delete(string $id): void;
 }

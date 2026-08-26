@@ -46,10 +46,12 @@ final class RestController
         $id = isset($params['id']) && $params['id'] !== '' ? sanitize_key($params['id']) : '';
         $existing = $id !== '' ? $this->repository->find($id) : null;
 
-        $token = isset($params['token']) ? (string) $params['token'] : '';
-        if ($token === '' && $existing !== null) {
-            $token = $existing->token();
-        }
+        $submitted = isset($params['token']) ? (string) $params['token'] : '';
+        $clearToken = filter_var(
+            isset($params['clear_token']) ? $params['clear_token'] : false,
+            FILTER_VALIDATE_BOOLEAN
+        );
+        $token = ($submitted === '' && $existing !== null && ! $clearToken) ? $existing->token() : $submitted;
 
         $secret = $existing !== null
             ? $existing->webhookSecret()
@@ -60,7 +62,7 @@ final class RestController
         }
 
         try {
-            $deployment = Deployment::fromArray(array(
+            $deployment = Deployment::fromArray(array_merge($this->tokenState($existing, $submitted, $clearToken), array(
                 'id' => $id,
                 'repo' => isset($params['repo']) ? $params['repo'] : '',
                 'branch' => isset($params['branch']) ? $params['branch'] : 'main',
@@ -73,16 +75,39 @@ final class RestController
                 'webhook_deploy' => isset($params['webhook_deploy']) ? $params['webhook_deploy'] : false,
                 'poll_deploy' => isset($params['poll_deploy']) ? $params['poll_deploy'] : false,
                 'poll_interval' => isset($params['poll_interval']) ? $params['poll_interval'] : 5,
-            ));
+            )));
         } catch (\InvalidArgumentException $e) {
             return ApiResponse::error($e->getMessage(), 422);
         }
 
-        $this->repository->save($deployment);
+        $this->repository->save($deployment, $clearToken);
 
         return ApiResponse::ok(
             array('deployment' => $this->present($deployment)),
             $existing !== null ? 200 : 201
+        );
+    }
+
+    private function tokenState(?Deployment $existing, string $submitted, bool $clearToken): array
+    {
+        $blank = array(
+            'token_last4' => '',
+            'token_expires_at' => '',
+            'token_checked_at' => '',
+            'token_alerted' => '',
+        );
+        if ($clearToken || $existing === null) {
+            return array_merge($blank, array('token_last4' => Deployment::last4($submitted)));
+        }
+        if ($submitted !== '' && $submitted !== $existing->token()) {
+            return array_merge($blank, array('token_last4' => Deployment::last4($submitted)));
+        }
+
+        return array(
+            'token_last4' => $existing->tokenLast4(),
+            'token_expires_at' => $existing->tokenExpiresAt(),
+            'token_checked_at' => $existing->tokenCheckedAt(),
+            'token_alerted' => $existing->tokenAlerted(),
         );
     }
 
@@ -183,6 +208,10 @@ final class RestController
             'target_slug' => $deployment->targetSlug(),
             'last_deployed_sha' => $deployment->lastDeployedSha(),
             'has_token' => $deployment->token() !== '',
+            'token_last4' => $deployment->tokenLast4(),
+            'token_status' => $deployment->tokenStatus(),
+            'token_expires_at' => $deployment->tokenExpiresAt(),
+            'token_checked_at' => $deployment->tokenCheckedAt(),
             'webhook_deploy' => $deployment->deploysOnPush(),
             'poll_deploy' => $deployment->deploysOnSchedule(),
             'poll_interval' => $deployment->pollInterval(),
