@@ -5,6 +5,7 @@ namespace Deployward;
 use Deployward\Admin\AdminPage;
 use Deployward\Cli\DeployCommand;
 use Deployward\Cron\CronPoller;
+use Deployward\Cron\TokenWatch;
 use Deployward\Deploy\DeployScheduler;
 use Deployward\Http\PreferencesController;
 use Deployward\Http\RestController;
@@ -24,6 +25,7 @@ final class Plugin
 
         add_filter('cron_schedules', array(__CLASS__, 'cronInterval'));
         self::ensureScheduled();
+        self::ensureTokenWatchScheduled();
     }
 
     public static function ensureScheduled(): void
@@ -33,10 +35,18 @@ final class Plugin
         }
     }
 
+    public static function ensureTokenWatchScheduled(): void
+    {
+        if (! wp_next_scheduled(TokenWatch::HOOK)) {
+            wp_schedule_event(time(), TokenWatch::INTERVAL, TokenWatch::HOOK);
+        }
+    }
+
     public static function deactivate(): void
     {
         wp_clear_scheduled_hook(CronPoller::HOOK);
         wp_clear_scheduled_hook(DeployScheduler::HOOK);
+        wp_clear_scheduled_hook(TokenWatch::HOOK);
     }
 
     public static function boot(): void
@@ -53,8 +63,10 @@ final class Plugin
 
         add_filter('cron_schedules', array(__CLASS__, 'cronInterval'));
         self::ensureScheduled();
+        self::ensureTokenWatchScheduled();
         add_action(DeployScheduler::HOOK, array($scheduler, 'run'), 10, 3);
         add_action(CronPoller::HOOK, array($poller, 'poll'));
+        add_action(TokenWatch::HOOK, array($container->tokenWatch(), 'run'));
 
         $routes = new RestRoutes(
             new RestController(

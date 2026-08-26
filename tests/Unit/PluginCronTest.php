@@ -52,4 +52,39 @@ final class PluginCronTest extends TestCase
 
         Plugin::ensureScheduled();
     }
+
+    public function test_ensure_token_watch_scheduled_schedules_a_daily_run(): void
+    {
+        \Brain\Monkey\Functions\when('wp_next_scheduled')->justReturn(false);
+        \Brain\Monkey\Functions\when('time')->justReturn(1000000000);
+        \Brain\Monkey\Functions\expect('wp_schedule_event')->once()->with(
+            1000000000,
+            \Deployward\Cron\TokenWatch::INTERVAL,
+            \Deployward\Cron\TokenWatch::HOOK
+        );
+
+        Plugin::ensureTokenWatchScheduled();
+    }
+
+    public function test_ensure_token_watch_scheduled_is_idempotent(): void
+    {
+        \Brain\Monkey\Functions\when('wp_next_scheduled')->justReturn(1234567890);
+        \Brain\Monkey\Functions\expect('wp_schedule_event')->never();
+
+        Plugin::ensureTokenWatchScheduled();
+    }
+
+    public function test_deactivate_clears_the_token_watch_too(): void
+    {
+        $cleared = array();
+        \Brain\Monkey\Functions\when('wp_clear_scheduled_hook')->alias(function ($hook) use (&$cleared) {
+            $cleared[] = $hook;
+        });
+
+        Plugin::deactivate();
+
+        $this->assertContains(CronPoller::HOOK, $cleared);
+        $this->assertContains(\Deployward\Cron\TokenWatch::HOOK, $cleared);
+        $this->assertContains(\Deployward\Deploy\DeployScheduler::HOOK, $cleared);
+    }
 }

@@ -15,6 +15,7 @@ final class GitHubClientTest extends TestCase
         Monkey\setUp();
         Functions\when('is_wp_error')->justReturn(false);
         Functions\when('wp_remote_retrieve_response_code')->justReturn(200);
+        Functions\when('wp_remote_retrieve_header')->justReturn('');
     }
 
     protected function tearDown(): void
@@ -138,5 +139,91 @@ final class GitHubClientTest extends TestCase
         $result = (new GitHubClient())->listBranches('Nara-IT/missing', null);
 
         $this->assertFalse($result->isOk());
+    }
+
+    public function test_resolve_sha_reads_the_token_expiry_header(): void
+    {
+        Functions\when('wp_remote_get')->justReturn(array());
+        Functions\when('wp_remote_retrieve_body')->justReturn('{"sha":"abc123"}');
+        Functions\when('wp_remote_retrieve_header')->justReturn('2026-09-26 12:34:56 UTC');
+
+        $client = new GitHubClient();
+        $client->resolveSha('Nara-IT/nara-core', 'main', 'ghp_x');
+
+        $this->assertSame('2026-09-26T12:34:56+00:00', $client->lastTokenExpiry());
+    }
+
+    public function test_resolve_sha_accepts_an_iso_expiry_header(): void
+    {
+        Functions\when('wp_remote_get')->justReturn(array());
+        Functions\when('wp_remote_retrieve_body')->justReturn('{"sha":"abc123"}');
+        Functions\when('wp_remote_retrieve_header')->justReturn('2026-09-26T12:34:56+00:00');
+
+        $client = new GitHubClient();
+        $client->resolveSha('Nara-IT/nara-core', 'main', 'ghp_x');
+
+        $this->assertSame('2026-09-26T12:34:56+00:00', $client->lastTokenExpiry());
+    }
+
+    public function test_resolve_sha_accepts_a_numeric_offset_expiry_header(): void
+    {
+        Functions\when('wp_remote_get')->justReturn(array());
+        Functions\when('wp_remote_retrieve_body')->justReturn('{"sha":"abc123"}');
+        Functions\when('wp_remote_retrieve_header')->justReturn('2026-09-26 14:34:56 +0200');
+
+        $client = new GitHubClient();
+        $client->resolveSha('Nara-IT/nara-core', 'main', 'ghp_x');
+
+        $this->assertSame('2026-09-26T12:34:56+00:00', $client->lastTokenExpiry());
+    }
+
+    public function test_a_missing_expiry_header_leaves_the_expiry_empty(): void
+    {
+        Functions\when('wp_remote_get')->justReturn(array());
+        Functions\when('wp_remote_retrieve_body')->justReturn('{"sha":"abc123"}');
+
+        $client = new GitHubClient();
+        $client->resolveSha('Nara-IT/nara-core', 'main', 'ghp_x');
+
+        $this->assertSame('', $client->lastTokenExpiry());
+    }
+
+    public function test_a_garbage_expiry_header_leaves_the_expiry_empty(): void
+    {
+        Functions\when('wp_remote_get')->justReturn(array());
+        Functions\when('wp_remote_retrieve_body')->justReturn('{"sha":"abc123"}');
+        Functions\when('wp_remote_retrieve_header')->justReturn('whenever it feels like it');
+
+        $client = new GitHubClient();
+        $client->resolveSha('Nara-IT/nara-core', 'main', 'ghp_x');
+
+        $this->assertSame('', $client->lastTokenExpiry());
+    }
+
+    public function test_list_branches_reads_the_token_expiry_header(): void
+    {
+        Functions\when('wp_remote_get')->justReturn(array());
+        Functions\when('wp_remote_retrieve_body')->justReturn('[{"name":"main"}]');
+        Functions\when('wp_remote_retrieve_header')->justReturn('2026-09-26 12:34:56 UTC');
+
+        $client = new GitHubClient();
+        $client->listBranches('Nara-IT/nara-core', 'ghp_x');
+
+        $this->assertSame('2026-09-26T12:34:56+00:00', $client->lastTokenExpiry());
+    }
+
+    public function test_a_failed_call_clears_the_remembered_expiry(): void
+    {
+        Functions\when('wp_remote_get')->justReturn(array());
+        Functions\when('wp_remote_retrieve_body')->justReturn('{"sha":"abc123"}');
+        Functions\when('wp_remote_retrieve_header')->justReturn('2026-09-26 12:34:56 UTC');
+        $client = new GitHubClient();
+        $client->resolveSha('Nara-IT/nara-core', 'main', 'ghp_x');
+
+        Functions\when('wp_remote_retrieve_response_code')->justReturn(401);
+        $result = $client->resolveSha('Nara-IT/nara-core', 'main', 'ghp_x');
+
+        $this->assertSame('', $client->lastTokenExpiry());
+        $this->assertSame(401, $result->data());
     }
 }

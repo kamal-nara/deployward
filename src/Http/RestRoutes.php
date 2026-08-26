@@ -42,6 +42,14 @@ final class RestRoutes
 
     public function register(): void
     {
+        $this->registerDeploymentRoutes();
+        $this->registerRunRoutes();
+        $this->registerActionRoutes();
+        $this->registerPreferenceRoutes();
+    }
+
+    private function registerDeploymentRoutes(): void
+    {
         $permission = array(__CLASS__, 'canManage');
 
         register_rest_route(self::NAMESPACE, '/deployments', array(
@@ -70,6 +78,11 @@ final class RestRoutes
                 },
             ),
         ));
+    }
+
+    private function registerRunRoutes(): void
+    {
+        $permission = array(__CLASS__, 'canManage');
 
         register_rest_route(self::NAMESPACE, '/deployments/(?P<id>[a-zA-Z0-9_-]+)/deploy', array(
             'methods' => 'POST',
@@ -94,6 +107,19 @@ final class RestRoutes
             'callback' => function ($request) {
                 $page = max(1, (int) $request->get_param('page'));
                 return $this->respond($this->controller->deploymentLog(sanitize_key($request['id']), $page));
+            },
+        ));
+    }
+
+    private function registerActionRoutes(): void
+    {
+        $permission = array(__CLASS__, 'canManage');
+
+        register_rest_route(self::NAMESPACE, '/deployments/(?P<id>[a-zA-Z0-9_-]+)/check-token', array(
+            'methods' => 'POST',
+            'permission_callback' => $permission,
+            'callback' => function ($request) {
+                return $this->respond($this->controller->checkToken(sanitize_key($request['id'])));
             },
         ));
 
@@ -125,6 +151,11 @@ final class RestRoutes
                 ));
             },
         ));
+    }
+
+    private function registerPreferenceRoutes(): void
+    {
+        $permission = array(__CLASS__, 'canManage');
 
         register_rest_route(self::NAMESPACE, '/settings', array(
             array(

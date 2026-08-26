@@ -5,6 +5,7 @@ namespace Deployward;
 use Deployward\Config\DeploymentRepository;
 use Deployward\Config\DeploymentRepositoryInterface;
 use Deployward\Config\SettingsRepository;
+use Deployward\Cron\TokenWatch;
 use Deployward\Deploy\BackupManager;
 use Deployward\Deploy\Deployer;
 use Deployward\Deploy\DeployerInterface;
@@ -44,6 +45,11 @@ final class Container
     public function notifier(): NotifierInterface
     {
         return new Notifier($this->settings());
+    }
+
+    public function tokenWatch(): TokenWatch
+    {
+        return new TokenWatch($this->repository(), $this->notifier(), admin_url('admin.php?page=deployward'));
     }
 
     public function log(): DeployLogInterface

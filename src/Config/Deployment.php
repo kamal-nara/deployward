@@ -133,17 +133,7 @@ final class Deployment
         if (! preg_match('#^[A-Za-z0-9][A-Za-z0-9_-]*$#', $slug)) {
             throw new \InvalidArgumentException('invalid target_slug');
         }
-        $webhook = filter_var(isset($data['webhook_deploy']) ? $data['webhook_deploy'] : false, FILTER_VALIDATE_BOOLEAN);
-        $poll = filter_var(isset($data['poll_deploy']) ? $data['poll_deploy'] : false, FILTER_VALIDATE_BOOLEAN);
-        if (! isset($data['webhook_deploy']) && ! isset($data['poll_deploy'])
-            && filter_var(isset($data['auto_deploy']) ? $data['auto_deploy'] : false, FILTER_VALIDATE_BOOLEAN)) {
-            $webhook = true;
-            $poll = true;
-        }
-        $interval = isset($data['poll_interval']) ? (int) $data['poll_interval'] : 5;
-        if (! in_array($interval, self::POLL_INTERVALS, true)) {
-            throw new \InvalidArgumentException('invalid poll_interval');
-        }
+        $triggers = self::resolveTriggers($data);
 
         return new self(
             (string) $data['id'],
@@ -155,10 +145,28 @@ final class Deployment
             isset($data['token']) ? (string) $data['token'] : '',
             isset($data['webhook_secret']) ? (string) $data['webhook_secret'] : '',
             isset($data['last_deployed_sha']) ? (string) $data['last_deployed_sha'] : '',
-            $webhook,
-            $poll,
-            $interval,
+            $triggers['webhook_deploy'],
+            $triggers['poll_deploy'],
+            $triggers['poll_interval'],
             $data
+        );
+    }
+
+    private static function resolveTriggers(array $data): array
+    {
+        $webhook = filter_var(isset($data['webhook_deploy']) ? $data['webhook_deploy'] : false, FILTER_VALIDATE_BOOLEAN);
+        $poll = filter_var(isset($data['poll_deploy']) ? $data['poll_deploy'] : false, FILTER_VALIDATE_BOOLEAN);
+        $legacyAutoDeploy = ! isset($data['webhook_deploy']) && ! isset($data['poll_deploy'])
+            && filter_var(isset($data['auto_deploy']) ? $data['auto_deploy'] : false, FILTER_VALIDATE_BOOLEAN);
+        $interval = isset($data['poll_interval']) ? (int) $data['poll_interval'] : 5;
+        if (! in_array($interval, self::POLL_INTERVALS, true)) {
+            throw new \InvalidArgumentException('invalid poll_interval');
+        }
+
+        return array(
+            'webhook_deploy' => $legacyAutoDeploy ? true : $webhook,
+            'poll_deploy' => $legacyAutoDeploy ? true : $poll,
+            'poll_interval' => $interval,
         );
     }
 

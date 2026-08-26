@@ -10,6 +10,8 @@ use Deployward\Log\DeployLogInterface;
 
 final class RestController
 {
+    const HTTP_UNAUTHORIZED = 401;
+
     /** @var DeploymentRepositoryInterface */
     private $repository;
     /** @var DeployerInterface */
@@ -164,6 +166,43 @@ final class RestController
         return ApiResponse::ok(array('secret' => $deployment->webhookSecret()));
     }
 
+    public function checkToken(string $id): ApiResponse
+    {
+        $deployment = $this->repository->find($id);
+        if ($deployment === null) {
+            return ApiResponse::error('Deployment not found', 404);
+        }
+        $token = $deployment->token() !== '' ? $deployment->token() : null;
+        $result = $this->github->resolveSha($deployment->repo(), $deployment->branch(), $token);
+        if (! $result->isOk()) {
+            if ($result->data() === self::HTTP_UNAUTHORIZED) {
+                return ApiResponse::ok(array('token_status' => 'rejected', 'message' => $result->message()));
+            }
+
+            return ApiResponse::error($result->message(), 502);
+        }
+        $checked = $this->recordTokenCheck($deployment);
+
+        return ApiResponse::ok(array(
+            'token_status' => $checked->tokenStatus(),
+            'token_expires_at' => $checked->tokenExpiresAt(),
+            'token_checked_at' => $checked->tokenCheckedAt(),
+            'token_last4' => $checked->tokenLast4(),
+            'message' => 'GitHub accepted the token for ' . $checked->repo() . '.',
+        ));
+    }
+
+    private function recordTokenCheck(Deployment $deployment): Deployment
+    {
+        $checked = $deployment->withTokenExpiry(
+            $this->github->lastTokenExpiry(),
+            gmdate(\DateTimeInterface::ATOM)
+        );
+        $this->repository->save($checked);
+
+        return $checked;
+    }
+
     public function branches(array $params): ApiResponse
     {
         $repo = \Deployward\Config\Deployment::normalizeRepo(isset($params['repo']) ? (string) $params['repo'] : '');
@@ -171,16 +210,38 @@ final class RestController
             return ApiResponse::error('repo must be a GitHub owner/repo or URL', 422);
         }
         $visibility = isset($params['visibility']) ? (string) $params['visibility'] : 'public';
-        $token = ($visibility === 'private' && isset($params['token'])) ? (string) $params['token'] : null;
-        if ($token === '') {
-            $token = null;
-        }
+        $known = $this->findById(isset($params['id']) ? (string) $params['id'] : '');
+        $token = $this->branchToken($params, $visibility, $known);
         $result = $this->github->listBranches($repo, $token);
         if (! $result->isOk()) {
             return ApiResponse::error($result->message(), 502);
         }
+        if ($known !== null && $known->visibility() === 'private') {
+            $this->recordTokenCheck($known);
+        }
 
         return ApiResponse::ok(array('branches' => $result->data()));
+    }
+
+    private function findById(string $id): ?Deployment
+    {
+        $clean = $id !== '' ? sanitize_key($id) : '';
+
+        return $clean !== '' ? $this->repository->find($clean) : null;
+    }
+
+    private function branchToken(array $params, string $visibility, ?Deployment $known): ?string
+    {
+        if ($visibility !== 'private') {
+            return null;
+        }
+        $submitted = isset($params['token']) ? (string) $params['token'] : '';
+        if ($submitted !== '') {
+            return $submitted;
+        }
+        $saved = $known !== null ? $known->token() : '';
+
+        return $saved !== '' ? $saved : null;
     }
 
     private function fromResult(\Deployward\Support\Result $result): ApiResponse

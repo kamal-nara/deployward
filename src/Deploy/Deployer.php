@@ -91,6 +91,7 @@ final class Deployer implements DeployerInterface
         if (! $shaResult->isOk()) {
             return $this->finish($deployment, $trigger, $shaResult, '');
         }
+        $deployment = $this->recordTokenExpiry($deployment);
         $sha = (string) $shaResult->data();
 
         if (! $force && $sha === $deployment->lastDeployedSha()) {
@@ -196,6 +197,21 @@ final class Deployer implements DeployerInterface
         }
 
         return Result::ok($sha, 'Deployed ' . substr($sha, 0, 8));
+    }
+
+    private function recordTokenExpiry(Deployment $deployment): Deployment
+    {
+        if ($deployment->visibility() !== 'private') {
+            return $deployment;
+        }
+        $expiry = $this->github->lastTokenExpiry();
+        if ($expiry === '' || $expiry === $deployment->tokenExpiresAt()) {
+            return $deployment;
+        }
+        $updated = $deployment->withTokenExpiry($expiry, gmdate(\DateTimeInterface::ATOM));
+        $this->repository->save($updated);
+
+        return $updated;
     }
 
     private function guardSelf(Deployment $deployment): ?Result

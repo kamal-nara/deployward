@@ -366,6 +366,7 @@
     actions.className = 'dw-deployment__actions';
 
     actions.appendChild(buildDeployBtn(app, d, pill));
+    if (d.visibility === 'private') { actions.appendChild(buildCheckTokenBtn(app, d, card)); }
     actions.appendChild(buildRollbackBtn(app, d, pill));
     actions.appendChild(buildViewLogBtn(app, d));
     actions.appendChild(buildWebhookBtn(app, d, card));
@@ -409,6 +410,7 @@
     const status = d.token_status;
     const hint = d.token_last4 ? ' \u2022\u2022\u2022\u2022' + d.token_last4 : '';
     if (!status || status === 'none') { return null; }
+    if (status === 'rejected')   { return { cls: 'is-bad',  label: 'Token rejected by GitHub' }; }
     if (status === 'missing')    { return { cls: 'is-bad',  label: 'No token' }; }
     if (status === 'unreadable') { return { cls: 'is-bad',  label: 'Token unreadable, enter it again' }; }
     if (status === 'expired')    { return { cls: 'is-bad',  label: 'Token expired' }; }
@@ -455,6 +457,44 @@
       });
     });
     return btn;
+  }
+
+  function buildCheckTokenBtn(app, d, card) {
+    const btn = elBtn('Check token', '');
+    btn.addEventListener('click', function () {
+      setInFlight(btn, true);
+      app.api('POST', 'deployments/' + d.id + '/check-token').then(function (res) {
+        setInFlight(btn, false);
+        if (res.status !== 200) {
+          app.showToast('is-error', (res.data && res.data.error) || 'Could not check the token.');
+          return;
+        }
+        const checked = Object.assign({}, d, {
+          token_status: res.data.token_status,
+          token_expires_at: res.data.token_expires_at || '',
+          token_last4: res.data.token_last4 || d.token_last4,
+        });
+        replaceTokenChip(card, checked);
+        app.showToast(
+          res.data.token_status === 'rejected' ? 'is-error' : 'is-ok',
+          res.data.message || 'Token checked.'
+        );
+      }).catch(function () {
+        setInFlight(btn, false);
+        app.showToast('is-error', 'Network error checking the token.');
+      });
+    });
+    return btn;
+  }
+
+  function replaceTokenChip(card, d) {
+    const head = card.querySelector('.dw-deployment__head');
+    if (!head) { return; }
+    const existing = head.querySelector('[data-dw-token-chip]');
+    const chip = buildTokenChip(d);
+    if (existing && chip) { head.replaceChild(chip, existing); return; }
+    if (existing && !chip) { head.removeChild(existing); return; }
+    if (chip) { head.appendChild(chip); }
   }
 
   function buildRollbackBtn(app, d, pill) {
@@ -843,7 +883,7 @@
       const repo = repoInput.value.trim();
       const visibility = getVisibility(form);
       const token = tokenInput.value.trim();
-      fetchBranches(app, repo, visibility, token, branchSelect, branchFallback, branchError, fetchBtn, isEdit ? d.branch : '');
+      fetchBranches(app, repo, visibility, token, branchSelect, branchFallback, branchError, fetchBtn, isEdit ? d.branch : '', isEdit ? d.id : '');
     });
 
     branchRow.appendChild(branchFallback);
@@ -1092,7 +1132,7 @@
     return { row: row, input: input };
   }
 
-  function fetchBranches(app, repo, visibility, token, branchSelect, branchFallback, branchError, fetchBtn, currentBranch) {
+  function fetchBranches(app, repo, visibility, token, branchSelect, branchFallback, branchError, fetchBtn, currentBranch, deploymentId) {
     if (!repo) {
       clearEl(branchError);
       branchError.textContent = 'Enter a repository first.';
@@ -1102,6 +1142,7 @@
     setInFlight(fetchBtn, true);
 
     const body = { repo: repo, visibility: visibility };
+    if (deploymentId) { body.id = deploymentId; }
     if (visibility === 'private' && token) { body.token = token; }
 
     app.api('POST', 'branches', body).then(function (res) {

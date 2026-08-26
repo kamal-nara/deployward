@@ -43,6 +43,7 @@ final class ContainerTest extends TestCase
         Functions\when('get_temp_dir')->justReturn(sys_get_temp_dir() . '/');
         Functions\when('get_theme_root')->justReturn(sys_get_temp_dir() . '/themes');
         Functions\when('home_url')->justReturn('https://nara.local/');
+        Functions\when('admin_url')->justReturn('https://nara.local/wp-admin/admin.php?page=deployward');
         Functions\when('get_option')->justReturn('admin@example.com');
         Functions\when('trailingslashit')->alias(function ($p) {
             return rtrim($p, '/') . '/';
@@ -65,5 +66,7 @@ final class ContainerTest extends TestCase
         $this->assertInstanceOf(DeployLogInterface::class, $container->log());
         $this->assertInstanceOf(GitHubClientInterface::class, $container->github());
         $this->assertInstanceOf(DeployerInterface::class, $container->deployer());
+        $this->assertInstanceOf(\Deployward\Cron\TokenWatch::class, $container->tokenWatch());
+        $this->assertInstanceOf(\Deployward\Notify\NotifierInterface::class, $container->notifier());
     }
 }

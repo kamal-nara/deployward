@@ -11,4 +11,6 @@ interface GitHubClientInterface
     public function downloadZipball(string $repo, string $ref, ?string $token, string $destFile): Result;
 
     public function listBranches(string $repo, ?string $token): Result;
+
+    public function lastTokenExpiry(): string;
 }

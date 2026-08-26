@@ -117,6 +117,7 @@ final class DeployerTest extends TestCase
     public function test_skips_when_already_at_latest_sha(): void
     {
         $github = Mockery::mock(GitHubClientInterface::class);
+        $github->shouldReceive('lastTokenExpiry')->andReturn('');
         $github->shouldReceive('resolveSha')->once()->andReturn(Result::ok('oldsha'));
         $log = Mockery::mock(DeployLogInterface::class);
         $log->shouldReceive('record')->once();
@@ -133,6 +134,7 @@ final class DeployerTest extends TestCase
         mkdir($payloadDir, 0755, true);
 
         $github = Mockery::mock(GitHubClientInterface::class);
+        $github->shouldReceive('lastTokenExpiry')->andReturn('');
         $github->shouldReceive('resolveSha')->andReturn(Result::ok('newsha'));
         $github->shouldReceive('downloadZipball')->andReturn(Result::ok('/tmp/x.zip'));
 
@@ -189,6 +191,7 @@ final class DeployerTest extends TestCase
         mkdir($payloadDir, 0755, true);
 
         $github = Mockery::mock(GitHubClientInterface::class);
+        $github->shouldReceive('lastTokenExpiry')->andReturn('');
         $github->shouldReceive('resolveSha')->andReturn(Result::ok('newsha'));
         $github->shouldReceive('downloadZipball')->andReturn(Result::ok('/tmp/x.zip'));
 
@@ -248,6 +251,7 @@ final class DeployerTest extends TestCase
         mkdir($payloadDir, 0755, true);
 
         $github = Mockery::mock(GitHubClientInterface::class);
+        $github->shouldReceive('lastTokenExpiry')->andReturn('');
         $github->shouldReceive('resolveSha')->andReturn(Result::ok('newsha'));
         $github->shouldReceive('downloadZipball')->andReturn(Result::ok('/tmp/x.zip'));
 
@@ -302,6 +306,7 @@ final class DeployerTest extends TestCase
         mkdir($payloadDir, 0755, true);
 
         $github = Mockery::mock(GitHubClientInterface::class);
+        $github->shouldReceive('lastTokenExpiry')->andReturn('');
         $github->shouldReceive('resolveSha')->once()->andReturn(Result::ok('newsha'));
         $github->shouldReceive('downloadZipball')->once()->andReturn(Result::ok('/tmp/x.zip'));
 
@@ -360,6 +365,7 @@ final class DeployerTest extends TestCase
     public function test_notifies_with_the_failure_kind_when_the_deploy_fails(): void
     {
         $github = Mockery::mock(GitHubClientInterface::class);
+        $github->shouldReceive('lastTokenExpiry')->andReturn('');
         $github->shouldReceive('resolveSha')->once()->andReturn(Result::fail('GitHub returned HTTP 401'));
         $log = Mockery::mock(DeployLogInterface::class);
         $log->shouldReceive('record')->once();
@@ -372,10 +378,76 @@ final class DeployerTest extends TestCase
         $this->assertFalse($result->isOk());
     }
 
+    private function githubMock()
+    {
+        $github = Mockery::mock(GitHubClientInterface::class);
+        $github->shouldReceive('lastTokenExpiry')->andReturn('');
+
+        return $github;
+    }
+
+    public function test_records_the_token_expiry_reported_by_github(): void
+    {
+        $github = Mockery::mock(GitHubClientInterface::class);
+        $github->shouldReceive('resolveSha')->once()->andReturn(Result::ok('oldsha'));
+        $github->shouldReceive('lastTokenExpiry')->andReturn('2026-09-26T12:34:56+00:00');
+        $log = Mockery::mock(DeployLogInterface::class);
+        $log->shouldReceive('record')->once();
+        $repository = Mockery::mock(DeploymentRepositoryInterface::class);
+        $repository->shouldReceive('save')->once()->with(Mockery::on(function ($dep) {
+            return $dep->tokenExpiresAt() === '2026-09-26T12:34:56+00:00' && $dep->tokenCheckedAt() !== '';
+        }));
+        $mocks = $this->baseMocks(array('github' => $github, 'log' => $log, 'repository' => $repository));
+
+        $result = $this->deployer($mocks)->deploy($this->deployment(), 'cron');
+
+        $this->assertTrue($result->isSkipped());
+    }
+
+    public function test_does_not_rewrite_an_unchanged_token_expiry(): void
+    {
+        $github = Mockery::mock(GitHubClientInterface::class);
+        $github->shouldReceive('resolveSha')->once()->andReturn(Result::ok('oldsha'));
+        $github->shouldReceive('lastTokenExpiry')->andReturn('2026-09-26T12:34:56+00:00');
+        $log = Mockery::mock(DeployLogInterface::class);
+        $log->shouldReceive('record')->once();
+        $repository = Mockery::mock(DeploymentRepositoryInterface::class);
+        $repository->shouldNotReceive('save');
+        $mocks = $this->baseMocks(array('github' => $github, 'log' => $log, 'repository' => $repository));
+        $deployment = Deployment::fromArray(array_merge(
+            $this->deployment()->toArray(),
+            array('token_expires_at' => '2026-09-26T12:34:56+00:00')
+        ));
+
+        $result = $this->deployer($mocks)->deploy($deployment, 'cron');
+
+        $this->assertTrue($result->isSkipped());
+    }
+
+    public function test_a_public_repo_never_touches_the_token_expiry(): void
+    {
+        $github = Mockery::mock(GitHubClientInterface::class);
+        $github->shouldReceive('resolveSha')->once()->andReturn(Result::ok('oldsha'));
+        $github->shouldNotReceive('lastTokenExpiry');
+        $log = Mockery::mock(DeployLogInterface::class);
+        $log->shouldReceive('record')->once();
+        $repository = Mockery::mock(DeploymentRepositoryInterface::class);
+        $repository->shouldNotReceive('save');
+        $mocks = $this->baseMocks(array('github' => $github, 'log' => $log, 'repository' => $repository));
+        $deployment = Deployment::fromArray(array_merge(
+            $this->deployment()->toArray(),
+            array('visibility' => 'public', 'token' => '')
+        ));
+
+        $result = $this->deployer($mocks)->deploy($deployment, 'cron');
+
+        $this->assertTrue($result->isSkipped());
+    }
+
     private function baseMocks(array $overrides): array
     {
         $defaults = array(
-            'github' => Mockery::mock(GitHubClientInterface::class),
+            'github' => $this->githubMock(),
             'extractor' => Mockery::mock(ExtractorInterface::class),
             'validator' => Mockery::mock(PayloadValidatorInterface::class),
             'backups' => Mockery::mock(BackupManagerInterface::class),
