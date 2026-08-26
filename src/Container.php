@@ -91,7 +91,8 @@ final class Container
             home_url('/'),
             get_temp_dir(),
             defined('DEPLOYWARD_SLUG') ? DEPLOYWARD_SLUG : 'deployward',
-            3
+            3,
+            admin_url('admin.php?page=deployward')
         );
     }
 }

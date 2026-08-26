@@ -41,6 +41,8 @@ final class Deployer implements DeployerInterface
     private $selfSlug;
     /** @var int */
     private $keepBackups;
+    /** @var string */
+    private $adminUrl;
 
     public function __construct(
         GitHubClientInterface $github,
@@ -57,7 +59,8 @@ final class Deployer implements DeployerInterface
         string $healthUrl,
         string $tempDir,
         string $selfSlug = 'deployward',
-        int $keepBackups = 3
+        int $keepBackups = 3,
+        string $adminUrl = ''
     ) {
         $this->github = $github;
         $this->extractor = $extractor;
@@ -74,6 +77,7 @@ final class Deployer implements DeployerInterface
         $this->tempDir = rtrim($tempDir, '/');
         $this->selfSlug = $selfSlug;
         $this->keepBackups = $keepBackups;
+        $this->adminUrl = $adminUrl;
     }
 
     public function deploy(Deployment $deployment, string $trigger, bool $force = false): Result
@@ -239,13 +243,28 @@ final class Deployer implements DeployerInterface
             'message' => $result->message(),
         ));
         if ($status !== 'skipped') {
+            $isSuccess = $status === 'success';
             $this->notifier->notify(
                 sprintf('[Deployward] %s: %s', strtoupper($status), $deployment->repo()),
-                $result->message(),
-                $status === 'success' ? NotifierInterface::KIND_SUCCESS : NotifierInterface::KIND_FAILURE
+                $isSuccess ? $result->message() : $this->failureBody($deployment, $trigger, $result),
+                $isSuccess ? NotifierInterface::KIND_SUCCESS : NotifierInterface::KIND_FAILURE
             );
         }
 
         return $result;
+    }
+
+    private function failureBody(Deployment $deployment, string $trigger, Result $result): string
+    {
+        return implode("\n", array(
+            'Repository: ' . $deployment->repo(),
+            'Branch: ' . $deployment->branch(),
+            'Trigger: ' . $trigger,
+            'Time: ' . wp_date('j M Y H:i T'),
+            '',
+            $result->message(),
+            '',
+            'Deployward: ' . $this->adminUrl,
+        ));
     }
 }

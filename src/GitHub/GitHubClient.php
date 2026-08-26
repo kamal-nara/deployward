@@ -8,6 +8,8 @@ final class GitHubClient implements GitHubClientInterface
 {
     private const API = 'https://api.github.com';
     private const EXPIRY_HEADER = 'github-authentication-token-expiration';
+    private const HTTP_UNAUTHORIZED = 401;
+    private const HTTP_NOT_FOUND = 404;
 
     /** @var string */
     private $lastTokenExpiry = '';
@@ -27,7 +29,7 @@ final class GitHubClient implements GitHubClientInterface
         }
         $code = (int) wp_remote_retrieve_response_code($response);
         if ($code !== 200) {
-            return Result::fail('GitHub returned HTTP ' . $code . ' resolving ' . $repo . '@' . $ref, $code);
+            return $this->httpFailure($code, $repo, $token, 'GitHub returned HTTP ' . $code . ' resolving ' . $repo . '@' . $ref);
         }
         $this->rememberTokenExpiry($response);
         $body = json_decode(wp_remote_retrieve_body($response), true);
@@ -51,7 +53,7 @@ final class GitHubClient implements GitHubClientInterface
         }
         $code = (int) wp_remote_retrieve_response_code($response);
         if ($code !== 200) {
-            return Result::fail('Download returned HTTP ' . $code, $code);
+            return $this->httpFailure($code, $repo, $token, 'Download returned HTTP ' . $code);
         }
         if (! is_file($destFile) || filesize($destFile) < 1) {
             return Result::fail('Downloaded archive is empty');
@@ -70,7 +72,7 @@ final class GitHubClient implements GitHubClientInterface
         }
         $code = (int) wp_remote_retrieve_response_code($response);
         if ($code !== 200) {
-            return Result::fail('GitHub returned HTTP ' . $code . ' listing branches for ' . $repo, $code);
+            return $this->httpFailure($code, $repo, $token, 'GitHub returned HTTP ' . $code . ' listing branches for ' . $repo);
         }
         $this->rememberTokenExpiry($response);
         $body = json_decode(wp_remote_retrieve_body($response), true);
@@ -85,6 +87,23 @@ final class GitHubClient implements GitHubClientInterface
         }
 
         return Result::ok($names);
+    }
+
+    private function httpFailure(int $code, string $repo, ?string $token, string $message): Result
+    {
+        $authenticated = $token !== null && $token !== '';
+        if ($code === self::HTTP_UNAUTHORIZED) {
+            return Result::fail(
+                'GitHub rejected the token for ' . $repo . ' (HTTP 401): it has expired or been revoked. '
+                . 'Replace it under Deployward > Deployments > Edit, then deploy again.',
+                $code
+            );
+        }
+        if ($code === self::HTTP_NOT_FOUND && $authenticated) {
+            return Result::fail($message . ' (the token may lack access to this repository)', $code);
+        }
+
+        return Result::fail($message, $code);
     }
 
     private function rememberTokenExpiry($response): void

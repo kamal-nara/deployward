@@ -226,4 +226,62 @@ final class GitHubClientTest extends TestCase
         $this->assertSame('', $client->lastTokenExpiry());
         $this->assertSame(401, $result->data());
     }
+
+    public function test_a_401_says_the_token_expired_and_where_to_replace_it(): void
+    {
+        Functions\when('wp_remote_retrieve_response_code')->justReturn(401);
+        Functions\when('wp_remote_get')->justReturn(array());
+        Functions\when('wp_remote_retrieve_body')->justReturn('');
+
+        $result = (new GitHubClient())->resolveSha('Nara-IT/nara-core', 'main', 'ghp_expired');
+
+        $this->assertStringContainsString('GitHub rejected the token for Nara-IT/nara-core (HTTP 401)', $result->message());
+        $this->assertStringContainsString('expired or been revoked', $result->message());
+        $this->assertStringContainsString('Deployward > Deployments > Edit', $result->message());
+    }
+
+    public function test_a_401_on_a_download_says_the_same_thing(): void
+    {
+        Functions\when('wp_remote_retrieve_response_code')->justReturn(401);
+        Functions\when('wp_remote_get')->justReturn(array());
+        Functions\when('wp_remote_retrieve_body')->justReturn('');
+
+        $result = (new GitHubClient())->downloadZipball('Nara-IT/nara-core', 'main', 'ghp_expired', '/tmp/dw.zip');
+
+        $this->assertStringContainsString('GitHub rejected the token for Nara-IT/nara-core (HTTP 401)', $result->message());
+    }
+
+    public function test_a_401_listing_branches_says_the_same_thing(): void
+    {
+        Functions\when('wp_remote_retrieve_response_code')->justReturn(401);
+        Functions\when('wp_remote_get')->justReturn(array());
+        Functions\when('wp_remote_retrieve_body')->justReturn('');
+
+        $result = (new GitHubClient())->listBranches('Nara-IT/nara-core', 'ghp_expired');
+
+        $this->assertStringContainsString('GitHub rejected the token for Nara-IT/nara-core (HTTP 401)', $result->message());
+    }
+
+    public function test_a_404_with_a_token_hints_at_repository_access(): void
+    {
+        Functions\when('wp_remote_retrieve_response_code')->justReturn(404);
+        Functions\when('wp_remote_get')->justReturn(array());
+        Functions\when('wp_remote_retrieve_body')->justReturn('');
+
+        $result = (new GitHubClient())->resolveSha('Nara-IT/nara-core', 'main', 'ghp_x');
+
+        $this->assertStringContainsString('GitHub returned HTTP 404 resolving Nara-IT/nara-core@main', $result->message());
+        $this->assertStringContainsString('the token may lack access to this repository', $result->message());
+    }
+
+    public function test_a_404_without_a_token_keeps_the_plain_message(): void
+    {
+        Functions\when('wp_remote_retrieve_response_code')->justReturn(404);
+        Functions\when('wp_remote_get')->justReturn(array());
+        Functions\when('wp_remote_retrieve_body')->justReturn('');
+
+        $result = (new GitHubClient())->resolveSha('Nara-IT/missing', 'main', null);
+
+        $this->assertSame('GitHub returned HTTP 404 resolving Nara-IT/missing@main', $result->message());
+    }
 }

@@ -79,6 +79,58 @@ Same flow, plus a token:
 
 The token is encrypted with keys derived from your site's auth salts before it is stored. It is only ever sent to `api.github.com`.
 
+### The saved token is never lost by an edit
+
+Editing a deployment never wipes the token. The Token field shows the saved one as a
+masked hint (`Saved token: ........abcd`): leave it blank and the stored token is kept
+exactly as it is. To take it away deliberately, use **Remove saved token** under the
+field and confirm, then save.
+
+Each deployment card carries a token chip so you can see the state at a glance:
+
+| Chip | Meaning |
+|------|---------|
+| `Token ....abcd` | A token is saved. GitHub reports no expiry for it. |
+| `Token ....abcd, expires 26 Sep 2026` | Saved, with the expiry GitHub reported. |
+| `Token expires in 5 days` (amber) | Inside the 14-day warning window. |
+| `Token expired` (red) | GitHub will refuse it. Replace it. |
+| `No token` (red) | Private repository with nothing saved. |
+| `Token unreadable, enter it again` (red) | The stored token no longer decrypts (site salts changed). Paste it again. |
+
+**Check token** on a private deployment asks GitHub straight away, records the expiry it
+reports, and updates the chip without deploying anything.
+
+### Set once and forget
+
+GitHub fine-grained tokens must expire; one year is the longest they allow. Two ways to
+avoid a silent stop:
+
+- Create the fine-grained token with the longest expiry and rely on Deployward's alerts:
+  one 14 days out, one the day before, and one the day it lapses. Replace the token,
+  press Check token, and the alert cycle starts over.
+- Or, where your policy allows it, use a classic personal access token with **No
+  expiration** and only the `repo` scope. Deployward shows no expiry for those and never
+  warns about them.
+
+A GitHub App installation, which refreshes its own credentials, is the future tier for
+sites that cannot rotate a token by hand.
+
+## Alerts and settings
+
+The **Settings** tab decides who hears about a deploy:
+
+- **Alert recipients**: a comma-separated list of e-mail addresses. Leave it empty and
+  Deployward uses the site admin e-mail. An address that is not a valid e-mail is
+  refused when you save, and the message names it.
+- **E-mail me when a deploy fails** (on by default): failures and token expiry alerts.
+- **E-mail me when a deploy succeeds** (on by default): turn it off for a quiet inbox on
+  a busy repository. Failures still go out.
+- **Send test e-mail**: sends "[Deployward] Test alert" to exactly the recipients above
+  and reports the addresses it used, so you find out now rather than during an outage.
+
+A failure e-mail carries the repository, the branch, what triggered the deploy, the time
+in the site's timezone, the reason, and a link straight to the Deployward screen.
+
 ## Automatic deploys
 
 Each deployment has two independent options under **Automatic Deployment Method**, both
@@ -202,13 +254,17 @@ wp deployward log rin70qvs
 | Extraction work directory | `wp-content/uploads/deployward-work-<hash>/` (cleaned after every deploy) |
 | Activity log | `wp_deployward_log` database table |
 | Deployment settings | `wp_options` (one row per deployment, token encrypted, not autoloaded) |
+| Alert recipients and e-mail toggles | `wp_options`, `deployward_settings` (not autoloaded) |
+| Daily token expiry watch | WP-Cron hook `deployward_token_watch` |
 | Webhook endpoint | `POST /wp-json/deployward/v1/webhook/<deployment-id>` |
 
 ## Troubleshooting
 
 **"Could not move ... (Permission denied)"**: the web server user cannot write to the target or the uploads directory. Fix the ownership/permissions on `wp-content`; if core plugin updates work in wp-admin, Deployward has what it needs.
 
-**"GitHub returned HTTP 404"** on a private repo: the token is missing, expired, or not scoped to that repository. Recreate the fine-grained token with Contents: Read-only access to the repo.
+**"GitHub rejected the token ... (HTTP 401)"**: the token expired or was revoked. Create a new one, edit the deployment, paste it, save, then press Check token.
+
+**"GitHub returned HTTP 404 ... (the token may lack access to this repository)"** on a private repo: the token is missing, expired, or not scoped to that repository. Recreate the fine-grained token with Contents: Read-only access to the repo.
 
 **"Health check failed, rolled back"**: the new version broke the site; Deployward already restored the previous version. Check the activity log for the reason, fix the code, push again.
 
@@ -231,7 +287,7 @@ This produces `deployward-<version>.zip` (built from the last commit, dev files 
 
 ```bash
 composer install
-composer test        # PHPUnit (144 tests)
+composer test        # PHPUnit (223 tests)
 ```
 
 The plugin has no runtime Composer dependencies; `vendor/` is only needed for the test suite.
@@ -243,6 +299,7 @@ The plugin has no runtime Composer dependencies; `vendor/` is only needed for th
 - The backups and work directories are protected against direct web access.
 - All admin REST endpoints require the `manage_options` capability and a REST nonce.
 - Deployward will not deploy over its own folder.
+- A token is never returned by the REST API, never rendered into the page, and never written to the log or an e-mail. Only its last four characters are kept in clear, as the masked hint.
 
 ## License
 

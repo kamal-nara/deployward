@@ -24,6 +24,8 @@ final class DeployerTest extends TestCase
 {
     use MockeryPHPUnitIntegration;
 
+    const ADMIN_URL = 'https://nara.local/wp-admin/admin.php?page=deployward';
+
     /** @var string */
     private $tempPluginRoot;
 
@@ -31,6 +33,7 @@ final class DeployerTest extends TestCase
     {
         parent::setUp();
         Monkey\setUp();
+        \Brain\Monkey\Functions\when('wp_date')->justReturn('27 Aug 2026 09:00 GST');
         $this->tempPluginRoot = sys_get_temp_dir() . '/dw-test-plugins-' . uniqid('', true);
         mkdir($this->tempPluginRoot, 0755, true);
     }
@@ -96,7 +99,10 @@ final class DeployerTest extends TestCase
                 'mu-plugin' => sys_get_temp_dir(),
             ),
             'https://nara.local/',
-            sys_get_temp_dir()
+            sys_get_temp_dir(),
+            'deployward',
+            3,
+            self::ADMIN_URL
         );
     }
 
@@ -442,6 +448,31 @@ final class DeployerTest extends TestCase
         $result = $this->deployer($mocks)->deploy($deployment, 'cron');
 
         $this->assertTrue($result->isSkipped());
+    }
+
+    public function test_a_failure_email_carries_the_repo_branch_trigger_time_and_admin_url(): void
+    {
+        $github = Mockery::mock(GitHubClientInterface::class);
+        $github->shouldReceive('lastTokenExpiry')->andReturn('');
+        $github->shouldReceive('resolveSha')->once()->andReturn(Result::fail('GitHub rejected the token'));
+        $log = Mockery::mock(DeployLogInterface::class);
+        $log->shouldReceive('record')->once();
+        $notifier = Mockery::mock(NotifierInterface::class);
+        $notifier->shouldReceive('notify')->once()->with(
+            Mockery::any(),
+            Mockery::on(function ($body) {
+                return strpos($body, 'Nara-IT/nara-core') !== false
+                    && strpos($body, 'main') !== false
+                    && strpos($body, 'webhook') !== false
+                    && strpos($body, '27 Aug 2026 09:00 GST') !== false
+                    && strpos($body, 'GitHub rejected the token') !== false
+                    && strpos($body, self::ADMIN_URL) !== false;
+            }),
+            'failure'
+        );
+        $mocks = $this->baseMocks(array('github' => $github, 'log' => $log, 'notifier' => $notifier));
+
+        $this->deployer($mocks)->deploy($this->deployment(), 'webhook');
     }
 
     private function baseMocks(array $overrides): array
