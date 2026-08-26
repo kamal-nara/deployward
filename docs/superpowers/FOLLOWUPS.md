@@ -96,3 +96,11 @@ or alongside Plan 2/3.
   - Health check hits the home URL only; a fatal confined to wp-admin or a specific
     template can still pass. Consider an authenticated-less admin-ajax ping as a
     second probe.
+
+## 0.5.0 review follow-ups (token alerts + settings tab)
+
+- 0.6.0: split assets/admin.js (1,700+ lines) into deployments/form/settings/log modules.
+  Ruled out for 0.5.0 to keep the fix round reviewable; it is 0.6.0's first commit.
+- `CronPoller::pollOne()` returns silently when resolveSha fails (no log line, no e-mail):
+  log it and rate-limit an alert, so a poll-only deployment with a dead token is not
+  quiet for days.

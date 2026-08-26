@@ -28,6 +28,9 @@ final class Notifier implements NotifierInterface
 
     private function shouldSend(string $kind): bool
     {
+        if ($kind === self::KIND_ALERT) {
+            return true;
+        }
         $settings = $this->settings->get();
         if ($kind === self::KIND_SUCCESS) {
             return $settings->shouldEmailOnSuccess();

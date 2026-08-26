@@ -115,6 +115,6 @@ final class TokenWatch
 
     private static function readableDate(\DateTimeImmutable $moment): string
     {
-        return $moment->setTimezone(new \DateTimeZone('UTC'))->format('j M Y');
+        return wp_date('j M Y', $moment->getTimestamp());
     }
 }

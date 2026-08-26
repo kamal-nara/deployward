@@ -23,8 +23,13 @@ final class SettingsRepository
 
     public function recipients(): array
     {
+        return $this->resolve($this->get()->alertRecipients());
+    }
+
+    public function resolve(string $raw): array
+    {
         $valid = array();
-        foreach (Settings::splitRecipients($this->get()->alertRecipients()) as $entry) {
+        foreach (Settings::splitRecipients($raw) as $entry) {
             if (is_email($entry)) {
                 $valid = array_merge($valid, array($entry));
             }

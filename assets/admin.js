@@ -437,8 +437,7 @@
   function formatExpiry(iso) {
     const when = iso ? new Date(iso) : null;
     if (!when || isNaN(when.getTime())) { return ''; }
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    return when.getUTCDate() + ' ' + months[when.getUTCMonth()] + ' ' + when.getUTCFullYear();
+    return when.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
   }
 
   function modeLabel(d) {
@@ -1424,14 +1423,19 @@
         body.appendChild(buildToastEl('is-error', (res.data && res.data.error) || 'Failed to load settings.'));
         return;
       }
-      body.appendChild(buildSettingsForm(app, res.data));
+      renderSettingsForm(app, body, res.data);
     }).catch(function () {
       clearEl(body);
       body.appendChild(buildToastEl('is-error', 'Network error loading settings.'));
     });
   }
 
-  function buildSettingsForm(app, data) {
+  function renderSettingsForm(app, body, data) {
+    clearEl(body);
+    body.appendChild(buildSettingsForm(app, body, data));
+  }
+
+  function buildSettingsForm(app, body, data) {
     const settings = data.settings || {};
     const form = el('div');
     form.className = 'dw-form';
@@ -1461,6 +1465,12 @@
     const failure = buildTriggerCheckbox('dw-email-failure', 'E-mail me when a deploy fails', settings.email_on_failure !== false);
     const success = buildTriggerCheckbox('dw-email-success', 'E-mail me when a deploy succeeds', settings.email_on_success !== false);
     form.appendChild(failure.row);
+
+    const alwaysHelp = el('p');
+    alwaysHelp.className = 'dw-help';
+    alwaysHelp.textContent = 'Token expiry warnings are always sent.';
+    form.appendChild(alwaysHelp);
+
     form.appendChild(success.row);
 
     const errorArea = el('div');
@@ -1468,14 +1478,14 @@
 
     const actions = el('div');
     actions.className = 'dw-form__actions';
-    actions.appendChild(buildSettingsSaveBtn(app, textarea, failure.input, success.input, errorArea));
-    actions.appendChild(buildTestEmailBtn(app));
+    actions.appendChild(buildSettingsSaveBtn(app, body, textarea, failure.input, success.input, errorArea));
+    actions.appendChild(buildTestEmailBtn(app, textarea));
     form.appendChild(actions);
 
     return form;
   }
 
-  function buildSettingsSaveBtn(app, textarea, failureInput, successInput, errorArea) {
+  function buildSettingsSaveBtn(app, body, textarea, failureInput, successInput, errorArea) {
     const btn = elBtn('Save settings', 'dw-btn--primary');
     btn.addEventListener('click', function () {
       clearEl(errorArea);
@@ -1488,6 +1498,7 @@
         setInFlight(btn, false);
         if (res.status === 200) {
           app.showToast('is-ok', 'Settings saved.');
+          renderSettingsForm(app, body, res.data);
           return;
         }
         const inlineErr = el('p');
@@ -1502,11 +1513,11 @@
     return btn;
   }
 
-  function buildTestEmailBtn(app) {
+  function buildTestEmailBtn(app, textarea) {
     const btn = elBtn('Send test e-mail', '');
     btn.addEventListener('click', function () {
       setInFlight(btn, true);
-      app.api('POST', 'settings/test-email').then(function (res) {
+      app.api('POST', 'settings/test-email', { alert_recipients: textarea.value.trim() }).then(function (res) {
         setInFlight(btn, false);
         if (res.status === 200) {
           app.showToast('is-ok', 'Sent to ' + (res.data.sent_to || []).join(', '));

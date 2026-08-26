@@ -90,14 +90,22 @@ final class NotifierTest extends TestCase
         $this->assertCount(0, $this->sent);
     }
 
-    public function test_an_alert_follows_the_failure_toggle(): void
+    public function test_an_alert_goes_out_even_with_deploy_failure_email_off(): void
+    {
+        $this->store(new Settings('ops@nara.ae', false, false));
+
+        $this->notifier()->notify('[Deployward] Token expires', 'renew it', 'alert');
+
+        $this->assertCount(1, $this->sent);
+        $this->assertSame(array('ops@nara.ae'), $this->sent[0]['to']);
+    }
+
+    public function test_an_alert_goes_out_with_every_toggle_on(): void
     {
         $this->store(new Settings('ops@nara.ae', true, true));
-        $this->notifier()->notify('[Deployward] Token expires', 'renew it', 'alert');
-        $this->assertCount(1, $this->sent);
 
-        $this->store(new Settings('ops@nara.ae', false, true));
         $this->notifier()->notify('[Deployward] Token expires', 'renew it', 'alert');
+
         $this->assertCount(1, $this->sent);
     }
 

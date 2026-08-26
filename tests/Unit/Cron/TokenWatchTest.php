@@ -3,6 +3,7 @@
 namespace Deployward\Tests\Unit\Cron;
 
 use Brain\Monkey;
+use Brain\Monkey\Functions;
 use Deployward\Config\Deployment;
 use Deployward\Config\DeploymentRepositoryInterface;
 use Deployward\Cron\TokenWatch;
@@ -16,11 +17,17 @@ final class TokenWatchTest extends TestCase
     use MockeryPHPUnitIntegration;
 
     const ADMIN_URL = 'https://nara.local/wp-admin/admin.php?page=deployward';
+    const SITE_TIMEZONE = 'Asia/Dubai';
 
     protected function setUp(): void
     {
         parent::setUp();
         Monkey\setUp();
+        Functions\when('wp_date')->alias(function ($format, $timestamp = null, $timezone = null) {
+            $moment = new \DateTimeImmutable('@' . ($timestamp === null ? time() : (int) $timestamp));
+
+            return $moment->setTimezone(new \DateTimeZone(self::SITE_TIMEZONE))->format($format);
+        });
     }
 
     protected function tearDown(): void
@@ -73,6 +80,24 @@ final class TokenWatchTest extends TestCase
             }),
             Mockery::on(function ($body) {
                 return strpos($body, self::ADMIN_URL) !== false;
+            }),
+            NotifierInterface::KIND_ALERT
+        );
+
+        $this->watch($repository, $notifier)->run($this->now());
+    }
+
+    public function test_the_alert_date_is_written_in_the_site_timezone(): void
+    {
+        $repository = $this->repositoryWith($this->deployment(array('token_expires_at' => '2026-09-05T21:00:00+00:00')));
+        $repository->shouldReceive('recordTokenState')->once();
+        $notifier = Mockery::mock(NotifierInterface::class);
+        $notifier->shouldReceive('notify')->once()->with(
+            Mockery::on(function ($subject) {
+                return strpos($subject, '6 Sep 2026') !== false;
+            }),
+            Mockery::on(function ($body) {
+                return strpos($body, '6 Sep 2026') !== false;
             }),
             NotifierInterface::KIND_ALERT
         );

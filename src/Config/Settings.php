@@ -53,9 +53,12 @@ final class Settings
     public static function splitRecipients(string $raw): array
     {
         $parts = array();
+        $seen = array();
         foreach (explode(',', $raw) as $entry) {
             $trimmed = trim($entry);
-            if ($trimmed !== '' && ! in_array($trimmed, $parts, true)) {
+            $key = strtolower($trimmed);
+            if ($trimmed !== '' && ! in_array($key, $seen, true)) {
+                $seen = array_merge($seen, array($key));
                 $parts = array_merge($parts, array($trimmed));
             }
         }

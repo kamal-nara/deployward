@@ -108,6 +108,12 @@ final class SettingsRepositoryTest extends TestCase
         $this->assertTrue($this->repository()->get()->shouldEmailOnFailure());
     }
 
+    public function test_split_recipients_dedupes_case_insensitively_keeping_the_first_spelling(): void
+    {
+        $this->assertSame(array('A@x.com'), Settings::splitRecipients('A@x.com, a@x.com'));
+        $this->assertSame(array('a@x.com', 'B@x.com'), Settings::splitRecipients('a@x.com, B@x.com, A@X.COM'));
+    }
+
     public function test_split_recipients_drops_empty_segments(): void
     {
         $this->assertSame(array('a@x.com', 'b@x.com'), Settings::splitRecipients('a@x.com,, b@x.com ,'));

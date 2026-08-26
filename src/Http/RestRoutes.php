@@ -177,8 +177,8 @@ final class RestRoutes
         register_rest_route(self::NAMESPACE, '/settings/test-email', array(
             'methods' => 'POST',
             'permission_callback' => $permission,
-            'callback' => function () {
-                return $this->respond($this->settings->sendTest());
+            'callback' => function ($request) {
+                return $this->respond($this->settings->sendTest($this->params($request)));
             },
         ));
 

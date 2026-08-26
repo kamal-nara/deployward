@@ -83,6 +83,55 @@ final class SettingsControllerTest extends TestCase
         $this->assertArrayNotHasKey(SettingsRepository::OPTION, $this->store);
     }
 
+    public function test_save_without_the_toggle_keys_keeps_the_stored_values(): void
+    {
+        (new SettingsRepository())->save(new Settings('ops@nara.ae', false, true));
+
+        $response = $this->controller()->save(array('alert_recipients' => 'lead@nara.ae'));
+
+        $this->assertSame(200, $response->status());
+        $stored = (new SettingsRepository())->get();
+        $this->assertSame('lead@nara.ae', $stored->alertRecipients());
+        $this->assertFalse($stored->shouldEmailOnFailure());
+        $this->assertTrue($stored->shouldEmailOnSuccess());
+    }
+
+    public function test_send_test_uses_the_submitted_list_without_saving_it(): void
+    {
+        (new SettingsRepository())->save(new Settings('ops@nara.ae', true, true));
+        $sent = array();
+        Functions\when('wp_mail')->alias(function ($to, $subject, $body) use (&$sent) {
+            $sent[] = array('to' => $to, 'subject' => $subject, 'body' => $body);
+            return true;
+        });
+
+        $response = $this->controller()->sendTest(array('alert_recipients' => 'draft@nara.ae, Draft@nara.ae'));
+
+        $this->assertSame(200, $response->status());
+        $this->assertSame(array('draft@nara.ae'), $response->data()['sent_to']);
+        $this->assertSame(array('draft@nara.ae'), $sent[0]['to']);
+        $this->assertSame('ops@nara.ae', (new SettingsRepository())->get()->alertRecipients());
+    }
+
+    public function test_send_test_rejects_a_bad_submitted_address_with_422(): void
+    {
+        Functions\when('wp_mail')->justReturn(true);
+
+        $response = $this->controller()->sendTest(array('alert_recipients' => 'ops@nara.ae, oops-at-nara'));
+
+        $this->assertSame(422, $response->status());
+        $this->assertStringContainsString('oops-at-nara', $response->data()['error']);
+    }
+
+    public function test_send_test_falls_back_to_the_admin_email_for_an_empty_submitted_list(): void
+    {
+        Functions\when('wp_mail')->justReturn(true);
+
+        $response = $this->controller()->sendTest(array('alert_recipients' => ''));
+
+        $this->assertSame(array('admin@example.com'), $response->data()['sent_to']);
+    }
+
     public function test_send_test_mails_the_configured_recipients_and_reports_them(): void
     {
         (new SettingsRepository())->save(new Settings('ops@nara.ae, kamal@nara.ae', true, true));
