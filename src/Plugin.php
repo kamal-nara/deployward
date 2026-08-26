@@ -64,9 +64,12 @@ final class Plugin
         add_filter('cron_schedules', array(__CLASS__, 'cronInterval'));
         self::ensureScheduled();
         self::ensureTokenWatchScheduled();
+        $watch = $container->tokenWatch();
         add_action(DeployScheduler::HOOK, array($scheduler, 'run'), 10, 3);
-        add_action(CronPoller::HOOK, array($poller, 'poll'));
-        add_action(TokenWatch::HOOK, array($container->tokenWatch(), 'run'));
+        add_action(CronPoller::HOOK, array($poller, 'poll'), 10, 0);
+        add_action(TokenWatch::HOOK, function () use ($watch) {
+            $watch->run();
+        }, 10, 0);
 
         $routes = new RestRoutes(
             new RestController(
