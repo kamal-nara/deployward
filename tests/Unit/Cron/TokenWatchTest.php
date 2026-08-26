@@ -64,9 +64,8 @@ final class TokenWatchTest extends TestCase
     public function test_warns_fourteen_days_before_the_expiry_and_records_the_stage(): void
     {
         $repository = $this->repositoryWith($this->deployment(array('token_expires_at' => '2026-09-05T09:00:00+00:00')));
-        $repository->shouldReceive('save')->once()->with(Mockery::on(function ($d) {
-            return $d->tokenAlerted() === '14d';
-        }));
+        $repository->shouldNotReceive('save');
+        $repository->shouldReceive('recordTokenState')->once()->with('dw_1', array('token_alerted' => '14d'));
         $notifier = Mockery::mock(NotifierInterface::class);
         $notifier->shouldReceive('notify')->once()->with(
             Mockery::on(function ($subject) {
@@ -88,6 +87,7 @@ final class TokenWatchTest extends TestCase
             'token_alerted' => '14d',
         )));
         $repository->shouldNotReceive('save');
+        $repository->shouldNotReceive('recordTokenState');
         $notifier = Mockery::mock(NotifierInterface::class);
         $notifier->shouldNotReceive('notify');
 
@@ -100,9 +100,8 @@ final class TokenWatchTest extends TestCase
             'token_expires_at' => '2026-08-27T20:00:00+00:00',
             'token_alerted' => '14d',
         )));
-        $repository->shouldReceive('save')->once()->with(Mockery::on(function ($d) {
-            return $d->tokenAlerted() === '14d,1d';
-        }));
+        $repository->shouldNotReceive('save');
+        $repository->shouldReceive('recordTokenState')->once()->with('dw_1', array('token_alerted' => '14d,1d'));
         $notifier = Mockery::mock(NotifierInterface::class);
         $notifier->shouldReceive('notify')->once();
 
@@ -115,9 +114,8 @@ final class TokenWatchTest extends TestCase
             'token_expires_at' => '2026-08-20T09:00:00+00:00',
             'token_alerted' => '14d,1d',
         )));
-        $repository->shouldReceive('save')->once()->with(Mockery::on(function ($d) {
-            return $d->tokenAlerted() === '14d,1d,expired';
-        }));
+        $repository->shouldNotReceive('save');
+        $repository->shouldReceive('recordTokenState')->once()->with('dw_1', array('token_alerted' => '14d,1d,expired'));
         $notifier = Mockery::mock(NotifierInterface::class);
         $notifier->shouldReceive('notify')->once()->with(
             Mockery::on(function ($subject) {
@@ -134,6 +132,7 @@ final class TokenWatchTest extends TestCase
     {
         $repository = $this->repositoryWith($this->deployment(array('token_expires_at' => '2026-12-01T09:00:00+00:00')));
         $repository->shouldNotReceive('save');
+        $repository->shouldNotReceive('recordTokenState');
         $notifier = Mockery::mock(NotifierInterface::class);
         $notifier->shouldNotReceive('notify');
 
@@ -144,6 +143,7 @@ final class TokenWatchTest extends TestCase
     {
         $repository = $this->repositoryWith($this->deployment());
         $repository->shouldNotReceive('save');
+        $repository->shouldNotReceive('recordTokenState');
         $notifier = Mockery::mock(NotifierInterface::class);
         $notifier->shouldNotReceive('notify');
 
@@ -158,6 +158,7 @@ final class TokenWatchTest extends TestCase
             'token_expires_at' => '2026-09-05T09:00:00+00:00',
         )));
         $repository->shouldNotReceive('save');
+        $repository->shouldNotReceive('recordTokenState');
         $notifier = Mockery::mock(NotifierInterface::class);
         $notifier->shouldNotReceive('notify');
 
@@ -170,7 +171,8 @@ final class TokenWatchTest extends TestCase
             'token_expires_at' => '2026-09-05T09:00:00+00:00',
             'token_alerted' => '',
         )));
-        $repository->shouldReceive('save')->once();
+        $repository->shouldNotReceive('save');
+        $repository->shouldReceive('recordTokenState')->once();
         $notifier = Mockery::mock(NotifierInterface::class);
         $notifier->shouldReceive('notify')->once();
 

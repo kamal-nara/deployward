@@ -59,6 +59,43 @@ final class DeploymentRepository implements DeploymentRepositoryInterface
         update_option(self::OPTION, $next, false);
     }
 
+    public function recordTokenState(string $id, array $fields): void
+    {
+        $changes = array();
+        foreach (self::recordableTokenFields() as $key) {
+            if (array_key_exists($key, $fields)) {
+                $changes = array_merge($changes, array($key => (string) $fields[$key]));
+            }
+        }
+        $this->patchRow($id, $changes);
+    }
+
+    public function recordDeployedSha(string $id, string $sha): void
+    {
+        $this->patchRow($id, array('last_deployed_sha' => $sha));
+    }
+
+    private static function recordableTokenFields(): array
+    {
+        return array_values(array_diff(Deployment::TOKEN_FIELDS, array('token_last4')));
+    }
+
+    private function patchRow(string $id, array $changes): void
+    {
+        if ($changes === array()) {
+            return;
+        }
+        $raw = get_option(self::OPTION, array());
+        if (! is_array($raw) || ! isset($raw[$id]) || ! is_array($raw[$id])) {
+            return;
+        }
+        $row = array_merge($raw[$id], $changes);
+        if ($row === $raw[$id]) {
+            return;
+        }
+        update_option(self::OPTION, array_merge($raw, array($id => $row)), false);
+    }
+
     public function delete(string $id): void
     {
         $raw = get_option(self::OPTION, array());

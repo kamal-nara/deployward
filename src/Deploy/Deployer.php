@@ -112,7 +112,7 @@ final class Deployer implements DeployerInterface
         $this->extractor->cleanup($newDir);
         if ($swap->isOk()) {
             $this->backups->prune($deployment->targetSlug(), $this->keepBackups);
-            $this->repository->save($deployment->withLastDeployedSha($sha));
+            $this->repository->recordDeployedSha($deployment->id(), $sha);
         }
 
         return $this->finish($deployment, $trigger, $swap, $sha);
@@ -205,15 +205,18 @@ final class Deployer implements DeployerInterface
 
     private function recordTokenExpiry(Deployment $deployment): Deployment
     {
-        if ($deployment->visibility() !== 'private') {
+        if ($deployment->visibility() !== 'private' || $deployment->token() === '') {
             return $deployment;
         }
         $expiry = $this->github->lastTokenExpiry();
-        if ($expiry === '' || $expiry === $deployment->tokenExpiresAt()) {
+        if ($expiry === $deployment->tokenExpiresAt()) {
             return $deployment;
         }
         $updated = $deployment->withTokenExpiry($expiry, gmdate(\DateTimeInterface::ATOM));
-        $this->repository->save($updated);
+        $this->repository->recordTokenState($updated->id(), array(
+            'token_expires_at' => $updated->tokenExpiresAt(),
+            'token_checked_at' => $updated->tokenCheckedAt(),
+        ));
 
         return $updated;
     }

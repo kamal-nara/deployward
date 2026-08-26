@@ -120,14 +120,28 @@ final class GitHubClient implements GitHubClientInterface
         foreach (array('Y-m-d H:i:s T', 'Y-m-d H:i:s P') as $format) {
             $parsed = \DateTimeImmutable::createFromFormat($format, $value);
             if ($parsed instanceof \DateTimeImmutable) {
-                return self::toUtcIso($parsed);
+                return self::parsedCleanly() ? self::toUtcIso($parsed) : '';
             }
         }
         try {
-            return self::toUtcIso(new \DateTimeImmutable($value));
+            $parsed = new \DateTimeImmutable($value);
         } catch (\Exception $e) {
             return '';
         }
+
+        return self::parsedCleanly() ? self::toUtcIso($parsed) : '';
+    }
+
+    private static function parsedCleanly(): bool
+    {
+        $errors = \DateTimeImmutable::getLastErrors();
+        if (! is_array($errors)) {
+            return true;
+        }
+        $warnings = isset($errors['warning_count']) ? (int) $errors['warning_count'] : 0;
+        $failures = isset($errors['error_count']) ? (int) $errors['error_count'] : 0;
+
+        return $warnings === 0 && $failures === 0;
     }
 
     private static function toUtcIso(\DateTimeImmutable $moment): string

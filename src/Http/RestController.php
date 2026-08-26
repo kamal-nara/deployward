@@ -198,7 +198,10 @@ final class RestController
             $this->github->lastTokenExpiry(),
             gmdate(\DateTimeInterface::ATOM)
         );
-        $this->repository->save($checked);
+        $this->repository->recordTokenState($checked->id(), array(
+            'token_expires_at' => $checked->tokenExpiresAt(),
+            'token_checked_at' => $checked->tokenCheckedAt(),
+        ));
 
         return $checked;
     }
@@ -211,12 +214,13 @@ final class RestController
         }
         $visibility = isset($params['visibility']) ? (string) $params['visibility'] : 'public';
         $known = $this->findById(isset($params['id']) ? (string) $params['id'] : '');
-        $token = $this->branchToken($params, $visibility, $known);
+        $submitted = isset($params['token']) ? (string) $params['token'] : '';
+        $token = $this->branchToken($submitted, $visibility, $known);
         $result = $this->github->listBranches($repo, $token);
         if (! $result->isOk()) {
             return ApiResponse::error($result->message(), 502);
         }
-        if ($known !== null && $known->visibility() === 'private') {
+        if ($submitted === '' && $token !== null && $known !== null && $known->visibility() === 'private') {
             $this->recordTokenCheck($known);
         }
 
@@ -230,12 +234,11 @@ final class RestController
         return $clean !== '' ? $this->repository->find($clean) : null;
     }
 
-    private function branchToken(array $params, string $visibility, ?Deployment $known): ?string
+    private function branchToken(string $submitted, string $visibility, ?Deployment $known): ?string
     {
         if ($visibility !== 'private') {
             return null;
         }
-        $submitted = isset($params['token']) ? (string) $params['token'] : '';
         if ($submitted !== '') {
             return $submitted;
         }

@@ -57,7 +57,9 @@ final class TokenWatch
             $this->body($deployment, $expires, $stage),
             NotifierInterface::KIND_ALERT
         );
-        $this->repository->save($deployment->withTokenAlerted(self::appendStage($deployment->tokenAlerted(), $stage)));
+        $this->repository->recordTokenState($deployment->id(), array(
+            'token_alerted' => self::appendStage($deployment->tokenAlerted(), $stage),
+        ));
     }
 
     private static function dueStage(\DateTimeImmutable $expires, \DateTimeImmutable $now): string

@@ -202,8 +202,11 @@ final class RestControllerTest extends TestCase
     {
         $repo = Mockery::mock(DeploymentRepositoryInterface::class);
         $repo->shouldReceive('find')->with('dw_1')->andReturn($this->deployment());
-        $repo->shouldReceive('save')->once()->with(Mockery::on(function ($d) {
-            return $d->tokenExpiresAt() === '2027-09-26T12:34:56+00:00' && $d->tokenCheckedAt() !== '';
+        $repo->shouldNotReceive('save');
+        $repo->shouldReceive('recordTokenState')->once()->with('dw_1', Mockery::on(function ($fields) {
+            return $fields['token_expires_at'] === '2027-09-26T12:34:56+00:00'
+                && $fields['token_checked_at'] !== ''
+                && ! array_key_exists('token_last4', $fields);
         }));
         $github = Mockery::mock(GitHubClientInterface::class);
         $github->shouldReceive('resolveSha')->once()->andReturn(\Deployward\Support\Result::ok('abc1234'));
@@ -216,11 +219,33 @@ final class RestControllerTest extends TestCase
         $this->assertSame('2027-09-26T12:34:56+00:00', $response->data()['token_expires_at']);
     }
 
+    public function test_check_token_clears_a_stale_expiry_for_a_non_expiring_token(): void
+    {
+        $stale = Deployment::fromArray(array_merge(
+            $this->deployment()->toArray(),
+            array('token_expires_at' => '2026-01-01T00:00:00+00:00')
+        ));
+        $repo = Mockery::mock(DeploymentRepositoryInterface::class);
+        $repo->shouldReceive('find')->with('dw_1')->andReturn($stale);
+        $repo->shouldReceive('recordTokenState')->once()->with('dw_1', Mockery::on(function ($fields) {
+            return $fields['token_expires_at'] === '';
+        }));
+        $github = Mockery::mock(GitHubClientInterface::class);
+        $github->shouldReceive('resolveSha')->once()->andReturn(\Deployward\Support\Result::ok('abc1234'));
+        $github->shouldReceive('lastTokenExpiry')->andReturn('');
+
+        $response = $this->controller($repo, null, null, $github)->checkToken('dw_1');
+
+        $this->assertSame('', $response->data()['token_expires_at']);
+        $this->assertSame('saved', $response->data()['token_status']);
+    }
+
     public function test_check_token_reports_a_rejected_token_without_saving(): void
     {
         $repo = Mockery::mock(DeploymentRepositoryInterface::class);
         $repo->shouldReceive('find')->with('dw_1')->andReturn($this->deployment());
         $repo->shouldNotReceive('save');
+        $repo->shouldNotReceive('recordTokenState');
         $github = Mockery::mock(GitHubClientInterface::class);
         $github->shouldReceive('resolveSha')->once()
             ->andReturn(\Deployward\Support\Result::fail('GitHub rejected the token', 401));
@@ -254,29 +279,31 @@ final class RestControllerTest extends TestCase
         $this->assertSame(404, $this->controller($repo)->checkToken('nope')->status());
     }
 
-    public function test_branches_records_the_expiry_for_a_known_deployment(): void
+    public function test_branches_does_not_record_a_check_for_a_token_typed_into_the_form(): void
     {
         $repo = Mockery::mock(DeploymentRepositoryInterface::class);
         $repo->shouldReceive('find')->with('dw_1')->andReturn($this->deployment());
-        $repo->shouldReceive('save')->once()->with(Mockery::on(function ($d) {
-            return $d->tokenExpiresAt() === '2027-09-26T12:34:56+00:00';
-        }));
+        $repo->shouldNotReceive('save');
+        $repo->shouldNotReceive('recordTokenState');
         $github = Mockery::mock(GitHubClientInterface::class);
-        $github->shouldReceive('listBranches')->once()->andReturn(\Deployward\Support\Result::ok(array('main')));
-        $github->shouldReceive('lastTokenExpiry')->andReturn('2027-09-26T12:34:56+00:00');
+        $github->shouldReceive('listBranches')->once()->with('Nara-IT/nara-core', 'ghp_typed')
+            ->andReturn(\Deployward\Support\Result::ok(array('main')));
 
         $response = $this->controller($repo, null, null, $github)->branches(array(
-            'id' => 'dw_1', 'repo' => 'Nara-IT/nara-core', 'visibility' => 'private', 'token' => 'ghp_x',
+            'id' => 'dw_1', 'repo' => 'Nara-IT/nara-core', 'visibility' => 'private', 'token' => 'ghp_typed',
         ));
 
         $this->assertSame(200, $response->status());
     }
 
-    public function test_branches_falls_back_to_the_saved_token_when_the_field_is_blank(): void
+    public function test_branches_records_the_check_when_the_saved_token_was_used(): void
     {
         $repo = Mockery::mock(DeploymentRepositoryInterface::class);
         $repo->shouldReceive('find')->with('dw_1')->andReturn($this->deployment('ghp_saved'));
-        $repo->shouldReceive('save')->once();
+        $repo->shouldNotReceive('save');
+        $repo->shouldReceive('recordTokenState')->once()->with('dw_1', Mockery::on(function ($fields) {
+            return $fields['token_expires_at'] === '2027-09-26T12:34:56+00:00';
+        }));
         $github = Mockery::mock(GitHubClientInterface::class);
         $github->shouldReceive('listBranches')->once()->with('Nara-IT/nara-core', 'ghp_saved')
             ->andReturn(\Deployward\Support\Result::ok(array('main')));

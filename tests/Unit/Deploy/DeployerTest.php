@@ -350,11 +350,8 @@ final class DeployerTest extends TestCase
         $notifier->shouldReceive('notify')->once()->with(Mockery::any(), Mockery::any(), 'success');
 
         $repository = Mockery::mock(DeploymentRepositoryInterface::class);
-        $repository->shouldReceive('save')->once()->with(
-            Mockery::on(function ($dep) {
-                return $dep instanceof Deployment && $dep->lastDeployedSha() === 'newsha';
-            })
-        );
+        $repository->shouldNotReceive('save');
+        $repository->shouldReceive('recordDeployedSha')->once()->with('abc', 'newsha');
 
         $mocks = array(
             'github' => $github, 'extractor' => $extractor, 'validator' => $validator,
@@ -400,12 +397,37 @@ final class DeployerTest extends TestCase
         $log = Mockery::mock(DeployLogInterface::class);
         $log->shouldReceive('record')->once();
         $repository = Mockery::mock(DeploymentRepositoryInterface::class);
-        $repository->shouldReceive('save')->once()->with(Mockery::on(function ($dep) {
-            return $dep->tokenExpiresAt() === '2026-09-26T12:34:56+00:00' && $dep->tokenCheckedAt() !== '';
+        $repository->shouldNotReceive('save');
+        $repository->shouldReceive('recordTokenState')->once()->with('abc', Mockery::on(function ($fields) {
+            return $fields['token_expires_at'] === '2026-09-26T12:34:56+00:00'
+                && $fields['token_checked_at'] !== ''
+                && ! array_key_exists('token_last4', $fields);
         }));
         $mocks = $this->baseMocks(array('github' => $github, 'log' => $log, 'repository' => $repository));
 
         $result = $this->deployer($mocks)->deploy($this->deployment(), 'cron');
+
+        $this->assertTrue($result->isSkipped());
+    }
+
+    public function test_a_non_expiring_token_clears_a_stale_recorded_expiry(): void
+    {
+        $github = Mockery::mock(GitHubClientInterface::class);
+        $github->shouldReceive('resolveSha')->once()->andReturn(Result::ok('oldsha'));
+        $github->shouldReceive('lastTokenExpiry')->andReturn('');
+        $log = Mockery::mock(DeployLogInterface::class);
+        $log->shouldReceive('record')->once();
+        $repository = Mockery::mock(DeploymentRepositoryInterface::class);
+        $repository->shouldReceive('recordTokenState')->once()->with('abc', Mockery::on(function ($fields) {
+            return $fields['token_expires_at'] === '';
+        }));
+        $mocks = $this->baseMocks(array('github' => $github, 'log' => $log, 'repository' => $repository));
+        $deployment = Deployment::fromArray(array_merge(
+            $this->deployment()->toArray(),
+            array('token_expires_at' => '2026-01-01T00:00:00+00:00')
+        ));
+
+        $result = $this->deployer($mocks)->deploy($deployment, 'cron');
 
         $this->assertTrue($result->isSkipped());
     }
@@ -419,6 +441,7 @@ final class DeployerTest extends TestCase
         $log->shouldReceive('record')->once();
         $repository = Mockery::mock(DeploymentRepositoryInterface::class);
         $repository->shouldNotReceive('save');
+        $repository->shouldNotReceive('recordTokenState');
         $mocks = $this->baseMocks(array('github' => $github, 'log' => $log, 'repository' => $repository));
         $deployment = Deployment::fromArray(array_merge(
             $this->deployment()->toArray(),
@@ -439,6 +462,7 @@ final class DeployerTest extends TestCase
         $log->shouldReceive('record')->once();
         $repository = Mockery::mock(DeploymentRepositoryInterface::class);
         $repository->shouldNotReceive('save');
+        $repository->shouldNotReceive('recordTokenState');
         $mocks = $this->baseMocks(array('github' => $github, 'log' => $log, 'repository' => $repository));
         $deployment = Deployment::fromArray(array_merge(
             $this->deployment()->toArray(),

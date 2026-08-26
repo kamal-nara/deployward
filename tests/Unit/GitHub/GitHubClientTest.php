@@ -274,6 +274,24 @@ final class GitHubClientTest extends TestCase
         $this->assertStringContainsString('the token may lack access to this repository', $result->message());
     }
 
+    public function test_parse_expiry_normalises_a_github_header_to_utc(): void
+    {
+        $this->assertSame(
+            '2027-09-26T12:34:56+00:00',
+            GitHubClient::parseExpiry('2027-09-26 12:34:56 UTC')
+        );
+    }
+
+    public function test_parse_expiry_rejects_a_date_that_only_parses_by_overflowing(): void
+    {
+        $this->assertSame('', GitHubClient::parseExpiry('2026-13-45 12:00:00 UTC'));
+    }
+
+    public function test_parse_expiry_returns_nothing_for_an_absent_header(): void
+    {
+        $this->assertSame('', GitHubClient::parseExpiry(''));
+    }
+
     public function test_a_404_without_a_token_keeps_the_plain_message(): void
     {
         Functions\when('wp_remote_retrieve_response_code')->justReturn(404);
