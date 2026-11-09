@@ -540,6 +540,25 @@ final class RestControllerTest extends TestCase
 
         $this->assertSame(201, $response->status());
     }
+    public function test_save_reports_an_unusable_encryption_key_in_plain_words_without_the_token(): void
+    {
+        $previous = (string) ini_get('error_log');
+        ini_set('error_log', '/dev/null');
+        $repo = Mockery::mock(DeploymentRepositoryInterface::class);
+        $repo->shouldReceive('find')->andReturn(null);
+        $repo->shouldReceive('save')->once()->andThrow(new \RuntimeException('could not lock ghp_secret_token_value'));
+
+        $response = $this->controller($repo)->saveDeployment(array(
+            'repo' => 'Nara-IT/nara-core', 'branch' => 'main', 'visibility' => 'private',
+            'target_type' => 'plugin', 'target_slug' => 'nara-core', 'token' => 'ghp_secret_token_value',
+        ));
+        ini_set('error_log', $previous);
+
+        $this->assertSame(500, $response->status());
+        $this->assertStringContainsString('encryption key', $response->data()['error']);
+        $this->assertStringContainsString('Nothing was changed', $response->data()['error']);
+        $this->assertStringNotContainsString('ghp_secret', json_encode($response->data()));
+    }
 }
 
 namespace Deployward\Tests\Unit\Http;

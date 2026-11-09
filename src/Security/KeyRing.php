@@ -11,6 +11,8 @@ final class KeyRing
     const LEGACY_OWN_PREVIOUS = 'own-previous';
     const LEGACY_OWN = 'own';
     const LEGACY_SALTS = 'salts';
+    const SAVE_FAILURE_MESSAGE = 'Deployward could not save the token because it cannot lock it with its encryption key '
+        . '(the key is damaged or cannot be stored). Nothing was changed. Check the PHP error log for details.';
 
     /** @var ?string */
     private $configuredKey;

@@ -7,6 +7,7 @@ use Deployward\Config\DeploymentRepositoryInterface;
 use Deployward\Deploy\DeployerInterface;
 use Deployward\GitHub\GitHubClientInterface;
 use Deployward\Log\DeployLogInterface;
+use Deployward\Security\KeyRing;
 
 final class RestController
 {
@@ -82,7 +83,13 @@ final class RestController
             return ApiResponse::error($e->getMessage(), 422);
         }
 
-        $this->repository->save($deployment, $clearToken);
+        try {
+            $this->repository->save($deployment, $clearToken);
+        } catch (\RuntimeException $e) {
+            error_log('Deployward: could not save a deployment: ' . $e->getMessage());
+
+            return ApiResponse::error(KeyRing::SAVE_FAILURE_MESSAGE, 500);
+        }
 
         return ApiResponse::ok(
             array('deployment' => $this->present($deployment)),

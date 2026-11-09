@@ -146,4 +146,29 @@ final class DeployCommandTest extends TestCase
 
         $this->assertNotEmpty(\WP_CLI::$success);
     }
+
+    public function test_add_reports_an_unusable_encryption_key_without_the_token(): void
+    {
+        $previous = (string) ini_get('error_log');
+        ini_set('error_log', '/dev/null');
+        $repository = Mockery::mock(DeploymentRepositoryInterface::class);
+        $repository->shouldReceive('save')->once()->andThrow(new \RuntimeException('could not lock ghp_secret_token_value'));
+        $command = new DeployCommand($repository, Mockery::mock(DeployerInterface::class), Mockery::mock(DeployLogInterface::class));
+
+        $message = '';
+        try {
+            $command->add(array(), array(
+                'id' => 'abc', 'repo' => 'Nara-IT/nara-core', 'branch' => 'main', 'visibility' => 'private',
+                'type' => 'plugin', 'slug' => 'nara-core', 'token' => 'ghp_secret_token_value',
+            ));
+        } catch (\Exception $e) {
+            $message = $e->getMessage();
+        }
+        ini_set('error_log', $previous);
+
+        $this->assertStringContainsString('encryption key', $message);
+        $this->assertStringContainsString('Nothing was changed', $message);
+        $this->assertStringNotContainsString('ghp_secret', $message);
+        $this->assertSame(array(), \WP_CLI::$success);
+    }
 }

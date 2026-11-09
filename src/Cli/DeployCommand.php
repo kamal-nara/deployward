@@ -6,6 +6,7 @@ use Deployward\Config\Deployment;
 use Deployward\Config\DeploymentRepositoryInterface;
 use Deployward\Deploy\DeployerInterface;
 use Deployward\Log\DeployLogInterface;
+use Deployward\Security\KeyRing;
 
 final class DeployCommand
 {
@@ -82,7 +83,13 @@ final class DeployCommand
             \WP_CLI::error($e->getMessage());
             return;
         }
-        $this->repository->save($deployment);
+        try {
+            $this->repository->save($deployment);
+        } catch (\RuntimeException $e) {
+            error_log('Deployward: could not save a deployment: ' . $e->getMessage());
+            \WP_CLI::error(KeyRing::SAVE_FAILURE_MESSAGE);
+            return;
+        }
         \WP_CLI::success('Added deployment ' . $id . ' (' . $deployment->repo() . ')');
     }
 
