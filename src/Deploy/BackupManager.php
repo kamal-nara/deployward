@@ -6,6 +6,11 @@ use Deployward\Support\Result;
 
 final class BackupManager implements BackupManagerInterface
 {
+    private const ROOT_PREFIX = 'deployward-backups-';
+    private const ROOT_PATTERN = '/^deployward-backups-[A-Za-z0-9]+$/';
+    private const SLUG_PATTERN = '/^[A-Za-z0-9][A-Za-z0-9_-]*$/';
+    private const BACKUP_PATTERN = '/^\d{8}-\d{6}-[0-9a-fA-F]+$/';
+
     /** @var string */
     private $baseDir;
     /** @var DirectoryMoverInterface */
@@ -57,6 +62,7 @@ final class BackupManager implements BackupManagerInterface
         if ($latest === null) {
             return Result::fail('No backup available to restore');
         }
+        $this->ensureProtected();
         $sidecar = $this->baseDir . '/.restore-tmp-' . $slug . '-' . gmdate('YmdHis');
         $hadTarget = is_dir($targetDir);
         if ($hadTarget) {
@@ -96,23 +102,52 @@ final class BackupManager implements BackupManagerInterface
 
     private function sortedBackups(string $slug): array
     {
-        $slugDir = $this->baseDir . '/' . $slug;
-        if (! is_dir($slugDir)) {
+        if (preg_match(self::SLUG_PATTERN, $slug) !== 1) {
             return array();
         }
-        $entries = array_values(array_diff(scandir($slugDir), array('.', '..')));
-        $dirs = array();
-        foreach ($entries as $entry) {
-            $path = $slugDir . '/' . $entry;
-            if (is_dir($path)) {
-                $dirs[] = $path;
+        $found = array();
+        foreach ($this->backupRoots() as $root) {
+            $found = array_merge($found, $this->backupsIn($root . '/' . $slug));
+        }
+        usort($found, function (string $a, string $b): int {
+            $byName = strcmp(basename($b), basename($a));
+
+            return $byName !== 0 ? $byName : strcmp($b, $a);
+        });
+
+        return $found;
+    }
+
+    private function backupRoots(): array
+    {
+        $roots = array($this->baseDir);
+        $entries = is_dir(dirname($this->baseDir)) ? scandir(dirname($this->baseDir)) : false;
+        foreach ($entries === false ? array() : $entries as $entry) {
+            $path = dirname($this->baseDir) . '/' . $entry;
+            $isLegacyRoot = preg_match(self::ROOT_PATTERN, $entry) === 1 && is_dir($path) && ! is_link($path);
+            if ($isLegacyRoot && $path !== $this->baseDir) {
+                $roots = array_merge($roots, array($path));
             }
         }
-        rsort($dirs);
+
+        return $roots;
+    }
+
+    private function backupsIn(string $slugDir): array
+    {
+        if (! is_dir($slugDir) || is_link($slugDir)) {
+            return array();
+        }
+        $dirs = array();
+        foreach (array_diff(scandir($slugDir), array('.', '..')) as $entry) {
+            $path = $slugDir . '/' . $entry;
+            if (preg_match(self::BACKUP_PATTERN, $entry) === 1 && is_dir($path) && ! is_link($path)) {
+                $dirs = array_merge($dirs, array($path));
+            }
+        }
 
         return $dirs;
     }
-
     private function deleteDir(string $dir): void
     {
         if (! is_dir($dir)) {

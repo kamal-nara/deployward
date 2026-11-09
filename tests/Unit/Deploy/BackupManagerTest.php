@@ -174,4 +174,120 @@ final class BackupManagerTest extends TestCase
         $this->assertFalse($result->isOk());
         $this->assertStringContainsString('cross-device link', $result->message());
     }
+
+    private function makeBackup(string $root, string $slug, string $name, string $marker = 'x'): string
+    {
+        $dir = $this->tmp . '/uploads/' . $root . '/' . $slug . '/' . $name;
+        mkdir($dir, 0777, true);
+        file_put_contents($dir . '/version.txt', $marker);
+
+        return $dir;
+    }
+
+    private function manager(): BackupManager
+    {
+        return new BackupManager($this->tmp . '/uploads/deployward-backups-newsuffix', new DirectoryMover());
+    }
+
+    private function names(string $root, string $slug): array
+    {
+        $dir = $this->tmp . '/uploads/' . $root . '/' . $slug;
+
+        return is_dir($dir) ? array_values(array_diff(scandir($dir), array('.', '..'))) : array();
+    }
+
+    public function test_restore_finds_a_backup_made_under_an_older_suffix(): void
+    {
+        $this->makeBackup('deployward-backups-oldsuffix', 'nara-core', '20260101-000001-aaaaaaaa', 'from-before-the-salt-change');
+        $target = $this->makeTarget('broken-current');
+
+        $result = $this->manager()->restoreLatest('nara-core', $target);
+
+        $this->assertTrue($result->isOk(), $result->message());
+        $this->assertSame('from-before-the-salt-change', file_get_contents($target . '/version.txt'));
+    }
+
+    public function test_latest_is_the_newest_backup_across_every_suffix_directory(): void
+    {
+        $this->makeBackup('deployward-backups-oldsuffix', 'nara-core', '20260301-000001-bbbbbbbb', 'newest-in-legacy');
+        $this->makeBackup('deployward-backups-newsuffix', 'nara-core', '20260201-000001-aaaaaaaa', 'older-in-current');
+        $target = $this->makeTarget('broken-current');
+
+        $this->manager()->restoreLatest('nara-core', $target);
+
+        $this->assertSame('newest-in-legacy', file_get_contents($target . '/version.txt'));
+    }
+
+    public function test_new_backups_go_into_the_current_directory_only(): void
+    {
+        $this->makeBackup('deployward-backups-oldsuffix', 'nara-core', '20260101-000001-aaaaaaaa');
+        $target = $this->makeTarget('v1');
+
+        $result = $this->manager()->backup($target, 'nara-core', 'cccccccc');
+
+        $this->assertTrue($result->isOk());
+        $this->assertStringStartsWith($this->tmp . '/uploads/deployward-backups-newsuffix/nara-core/', $result->data());
+        $this->assertCount(1, $this->names('deployward-backups-oldsuffix', 'nara-core'));
+    }
+
+    public function test_prune_keeps_the_newest_n_across_every_suffix_directory(): void
+    {
+        $this->makeBackup('deployward-backups-oldest', 'nara-core', '20260101-000001-aaaaaaaa');
+        $this->makeBackup('deployward-backups-oldest', 'nara-core', '20260102-000001-bbbbbbbb');
+        $this->makeBackup('deployward-backups-older', 'nara-core', '20260103-000001-cccccccc');
+        $this->makeBackup('deployward-backups-newsuffix', 'nara-core', '20260104-000001-dddddddd');
+        $this->makeBackup('deployward-backups-newsuffix', 'nara-core', '20260105-000001-eeeeeeee');
+
+        $this->manager()->prune('nara-core', 3);
+
+        $this->assertSame(array(), $this->names('deployward-backups-oldest', 'nara-core'));
+        $this->assertSame(array('20260103-000001-cccccccc'), $this->names('deployward-backups-older', 'nara-core'));
+        $this->assertSame(
+            array('20260104-000001-dddddddd', '20260105-000001-eeeeeeee'),
+            $this->names('deployward-backups-newsuffix', 'nara-core')
+        );
+    }
+
+    public function test_prune_deletes_nothing_that_is_not_a_backup_of_that_deployment(): void
+    {
+        $this->makeBackup('deployward-backups-oldsuffix', 'nara-core', '20260101-000001-aaaaaaaa');
+        $this->makeBackup('deployward-backups-oldsuffix', 'other-plugin', '20260101-000001-aaaaaaaa');
+        $this->makeBackup('deployward-backups-oldsuffix', 'nara-core', 'manual-copy');
+        file_put_contents($this->tmp . '/uploads/deployward-backups-oldsuffix/nara-core/notes.txt', 'keep me');
+        mkdir($this->tmp . '/uploads/deployward-work-oldsuffix/dw-extract-1', 0777, true);
+        mkdir($this->tmp . '/uploads/deployward-backups-oldsuffix.bak/nara-core/20260101-000001-aaaaaaaa', 0777, true);
+        mkdir($this->tmp . '/uploads/some-other-plugin/nara-core/20260101-000001-aaaaaaaa', 0777, true);
+
+        $this->manager()->prune('nara-core', 0);
+
+        $this->assertSame(array('manual-copy', 'notes.txt'), $this->names('deployward-backups-oldsuffix', 'nara-core'));
+        $this->assertCount(1, $this->names('deployward-backups-oldsuffix', 'other-plugin'));
+        $this->assertDirectoryExists($this->tmp . '/uploads/deployward-work-oldsuffix/dw-extract-1');
+        $this->assertDirectoryExists($this->tmp . '/uploads/deployward-backups-oldsuffix.bak/nara-core/20260101-000001-aaaaaaaa');
+        $this->assertDirectoryExists($this->tmp . '/uploads/some-other-plugin/nara-core/20260101-000001-aaaaaaaa');
+    }
+
+    public function test_prune_never_follows_a_symlinked_suffix_directory(): void
+    {
+        $outside = $this->tmp . '/outside';
+        mkdir($outside . '/nara-core/20260101-000001-aaaaaaaa', 0777, true);
+        mkdir($this->tmp . '/uploads', 0777, true);
+        symlink($outside, $this->tmp . '/uploads/deployward-backups-linked');
+
+        $this->manager()->prune('nara-core', 0);
+
+        $this->assertDirectoryExists($outside . '/nara-core/20260101-000001-aaaaaaaa');
+    }
+
+    public function test_a_slug_that_climbs_out_of_the_backup_directory_is_ignored(): void
+    {
+        mkdir($this->tmp . '/uploads/escape/20260101-000001-aaaaaaaa', 0777, true);
+        mkdir($this->tmp . '/uploads/deployward-backups-newsuffix', 0777, true);
+
+        $manager = $this->manager();
+        $manager->prune('../escape', 0);
+
+        $this->assertNull($manager->latest('../escape'));
+        $this->assertDirectoryExists($this->tmp . '/uploads/escape/20260101-000001-aaaaaaaa');
+    }
 }
