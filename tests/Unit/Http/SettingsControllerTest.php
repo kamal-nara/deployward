@@ -7,6 +7,8 @@ use Brain\Monkey\Functions;
 use Deployward\Config\Settings;
 use Deployward\Config\SettingsRepository;
 use Deployward\Http\SettingsController;
+use Deployward\Security\KeyRing;
+use Deployward\Tests\Support\InMemoryKeyStore;
 use Mockery\Adapter\Phpunit\MockeryPHPUnitIntegration;
 use PHPUnit\Framework\TestCase;
 
@@ -40,9 +42,70 @@ final class SettingsControllerTest extends TestCase
         parent::tearDown();
     }
 
-    private function controller(): SettingsController
+    private function controller(?KeyRing $keys = null): SettingsController
     {
-        return new SettingsController(new SettingsRepository());
+        $ring = $keys !== null ? $keys : KeyRing::fromMaterial(null, 'salts', new InMemoryKeyStore());
+
+        return new SettingsController(new SettingsRepository(), $ring);
+    }
+
+    public function test_get_reports_the_own_key_as_the_token_encryption_source(): void
+    {
+        $response = $this->controller()->get();
+
+        $this->assertSame(array(
+            'source' => 'own',
+            'summary' => "Deployward's own key (only changes when an admin runs wp deployward rotate-key)",
+            'problem' => '',
+        ), $response->data()['token_encryption']);
+    }
+
+    public function test_get_reports_the_wp_config_key_when_the_constant_is_the_primary(): void
+    {
+        $keys = KeyRing::fromMaterial(str_repeat('c', 40), 'salts', new InMemoryKeyStore());
+
+        $info = $this->controller($keys)->get()->data()['token_encryption'];
+
+        $this->assertSame('wp-config', $info['source']);
+        $this->assertSame('DEPLOYWARD_ENCRYPTION_KEY in wp-config.php', $info['summary']);
+        $this->assertSame('', $info['problem']);
+    }
+
+    public function test_get_reports_a_too_short_constant_as_a_problem_and_keeps_the_own_key(): void
+    {
+        $keys = KeyRing::fromMaterial('too-short-secret', 'salts', new InMemoryKeyStore());
+
+        $info = $this->controller($keys)->get()->data()['token_encryption'];
+
+        $this->assertSame('own', $info['source']);
+        $this->assertStringContainsString('at least 32 characters', $info['problem']);
+    }
+
+    public function test_the_settings_payload_carries_no_key_material(): void
+    {
+        $configured = 'a-secret-wp-config-key-0123456789-abcdef';
+        $own = InMemoryKeyStore::randomKey();
+        $payloads = array(
+            $this->controller(KeyRing::fromMaterial($configured, 'salts-material', new InMemoryKeyStore($own)))->get(),
+            $this->controller(KeyRing::fromMaterial('short-secret', 'salts-material', new InMemoryKeyStore($own)))->get(),
+            $this->controller(KeyRing::fromMaterial(null, 'salts-material', new InMemoryKeyStore($own)))->get(),
+        );
+
+        foreach ($payloads as $response) {
+            $json = json_encode($response->data());
+            $this->assertStringNotContainsString($configured, $json);
+            $this->assertStringNotContainsString('short-secret', $json);
+            $this->assertStringNotContainsString('salts-material', $json);
+            $this->assertStringNotContainsString(base64_encode($own), $json);
+            $this->assertStringNotContainsString(bin2hex($own), $json);
+        }
+    }
+
+    public function test_save_responds_with_the_token_encryption_status_too(): void
+    {
+        $response = $this->controller()->save(array('alert_recipients' => 'ops@nara.ae'));
+
+        $this->assertSame('own', $response->data()['token_encryption']['source']);
     }
 
     public function test_get_returns_the_settings_and_the_admin_email(): void

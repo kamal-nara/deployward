@@ -80,7 +80,7 @@ final class Plugin
             ),
             new WebhookController($container->repository(), new SignatureVerifier(), $scheduler),
             new PreferencesController(),
-            new SettingsController($container->settings())
+            new SettingsController($container->settings(), $container->keyRing())
         );
         add_action('rest_api_init', array($routes, 'register'));
 

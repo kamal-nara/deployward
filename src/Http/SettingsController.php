@@ -4,6 +4,7 @@ namespace Deployward\Http;
 
 use Deployward\Config\Settings;
 use Deployward\Config\SettingsRepository;
+use Deployward\Security\KeyRing;
 
 final class SettingsController
 {
@@ -11,10 +12,13 @@ final class SettingsController
 
     /** @var SettingsRepository */
     private $settings;
+    /** @var KeyRing */
+    private $keys;
 
-    public function __construct(SettingsRepository $settings)
+    public function __construct(SettingsRepository $settings, KeyRing $keys)
     {
         $this->settings = $settings;
+        $this->keys = $keys;
     }
 
     public function get(): ApiResponse
@@ -84,6 +88,11 @@ final class SettingsController
             'settings' => $settings->toArray(),
             'recipients' => $this->settings->recipients(),
             'admin_email' => (string) get_option('admin_email', ''),
+            'token_encryption' => array(
+                'source' => $this->keys->source(),
+                'summary' => $this->keys->summary(),
+                'problem' => $this->keys->problem(),
+            ),
         );
     }
 }

@@ -1473,6 +1473,7 @@
     form.appendChild(alwaysHelp);
 
     form.appendChild(success.row);
+    form.appendChild(buildTokenEncryptionRow(data.token_encryption));
 
     const errorArea = el('div');
     form.appendChild(errorArea);
@@ -1484,6 +1485,23 @@
     form.appendChild(actions);
 
     return form;
+  }
+
+  function buildTokenEncryptionRow(info) {
+    const row = el('div');
+    row.className = 'dw-field';
+    if (!info || !info.summary) { return row; }
+    const status = el('p');
+    status.className = 'dw-help';
+    status.textContent = 'Token encryption: ' + info.summary;
+    row.appendChild(status);
+    if (info.problem) {
+      const problem = el('p');
+      problem.className = 'dw-error';
+      problem.textContent = info.problem;
+      row.appendChild(problem);
+    }
+    return row;
   }
 
   function buildSettingsSaveBtn(app, body, textarea, failureInput, successInput, errorArea) {

@@ -111,7 +111,10 @@ final class RestRoutesTest extends TestCase
 
     private function makeSettingsController(): \Deployward\Http\SettingsController
     {
-        return new \Deployward\Http\SettingsController(new \Deployward\Config\SettingsRepository());
+        return new \Deployward\Http\SettingsController(
+            new \Deployward\Config\SettingsRepository(),
+            \Deployward\Security\KeyRing::fromMaterial(null, 'salts', new \Deployward\Tests\Support\InMemoryKeyStore())
+        );
     }
 
     private function makeWebhookController(): WebhookController
