@@ -11,27 +11,27 @@ final class BackupManager implements BackupManagerInterface
     private const SLUG_PATTERN = '/^[A-Za-z0-9][A-Za-z0-9_-]*$/';
     private const BACKUP_PATTERN = '/^\d{8}-\d{6}-[0-9a-fA-F]+$/';
 
-    /** @var string */
-    private $baseDir;
+    /** @var LazyPath */
+    private $base;
     /** @var DirectoryMoverInterface */
     private $mover;
 
-    public function __construct(string $baseDir, DirectoryMoverInterface $mover)
+    public function __construct($baseDir, DirectoryMoverInterface $mover)
     {
-        $this->baseDir = rtrim($baseDir, '/');
+        $this->base = new LazyPath($baseDir);
         $this->mover = $mover;
     }
 
     public function ensureProtected(): void
     {
-        if (! is_dir($this->baseDir) && ! wp_mkdir_p($this->baseDir)) {
+        if (! is_dir($this->base->get()) && ! wp_mkdir_p($this->base->get())) {
             return;
         }
-        $index = $this->baseDir . '/index.php';
+        $index = $this->base->get() . '/index.php';
         if (! is_file($index)) {
             file_put_contents($index, "<?php\n// Silence is golden.\n");
         }
-        $htaccess = $this->baseDir . '/.htaccess';
+        $htaccess = $this->base->get() . '/.htaccess';
         if (! is_file($htaccess)) {
             file_put_contents($htaccess, "Deny from all\n");
         }
@@ -43,7 +43,7 @@ final class BackupManager implements BackupManagerInterface
             return Result::skip('Nothing to back up; target does not exist yet');
         }
         $this->ensureProtected();
-        $slugDir = $this->baseDir . '/' . $slug;
+        $slugDir = $this->base->get() . '/' . $slug;
         if (! wp_mkdir_p($slugDir)) {
             return Result::fail('Could not create backup directory ' . $slugDir . ' (check that the uploads directory is writable)');
         }
@@ -63,7 +63,7 @@ final class BackupManager implements BackupManagerInterface
             return Result::fail('No backup available to restore');
         }
         $this->ensureProtected();
-        $sidecar = $this->baseDir . '/.restore-tmp-' . $slug . '-' . gmdate('YmdHis');
+        $sidecar = $this->base->get() . '/.restore-tmp-' . $slug . '-' . gmdate('YmdHis');
         $hadTarget = is_dir($targetDir);
         if ($hadTarget) {
             $setAside = $this->mover->move($targetDir, $sidecar);
@@ -120,12 +120,12 @@ final class BackupManager implements BackupManagerInterface
 
     private function backupRoots(): array
     {
-        $roots = array($this->baseDir);
-        $entries = is_dir(dirname($this->baseDir)) ? scandir(dirname($this->baseDir)) : false;
+        $roots = array($this->base->get());
+        $entries = is_dir(dirname($this->base->get())) ? scandir(dirname($this->base->get())) : false;
         foreach ($entries === false ? array() : $entries as $entry) {
-            $path = dirname($this->baseDir) . '/' . $entry;
+            $path = dirname($this->base->get()) . '/' . $entry;
             $isLegacyRoot = preg_match(self::ROOT_PATTERN, $entry) === 1 && is_dir($path) && ! is_link($path);
-            if ($isLegacyRoot && $path !== $this->baseDir) {
+            if ($isLegacyRoot && $path !== $this->base->get()) {
                 $roots = array_merge($roots, array($path));
             }
         }
@@ -150,6 +150,10 @@ final class BackupManager implements BackupManagerInterface
     }
     private function deleteDir(string $dir): void
     {
+        if (is_link($dir)) {
+            @unlink($dir);
+            return;
+        }
         if (! is_dir($dir)) {
             return;
         }

@@ -96,9 +96,14 @@ final class Container
     public function deployer(): DeployerInterface
     {
         $uploads = wp_upload_dir();
-        $suffix = (new StorageNames($this->wpdb))->suffix();
-        $backupsBase = trailingslashit($uploads['basedir']) . 'deployward-backups-' . $suffix;
-        $workBase = trailingslashit($uploads['basedir']) . 'deployward-work-' . $suffix;
+        $uploadsBase = trailingslashit($uploads['basedir']);
+        $names = new StorageNames($this->wpdb);
+        $backupsBase = function () use ($uploadsBase, $names) {
+            return $uploadsBase . 'deployward-backups-' . $names->suffix();
+        };
+        $workBase = function () use ($uploadsBase, $names) {
+            return $uploadsBase . 'deployward-work-' . $names->suffix();
+        };
         $muDir = defined('WPMU_PLUGIN_DIR') ? WPMU_PLUGIN_DIR : WP_CONTENT_DIR . '/mu-plugins';
         $mover = new DirectoryMover();
 
@@ -123,7 +128,8 @@ final class Container
             defined('DEPLOYWARD_SLUG') ? DEPLOYWARD_SLUG : 'deployward',
             3,
             $this->adminUrl(),
-            $this->tokenGuard()
+            $this->tokenGuard(),
+            $names
         );
     }
 }

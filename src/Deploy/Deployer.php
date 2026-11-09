@@ -46,6 +46,8 @@ final class Deployer implements DeployerInterface
     private $adminUrl;
     /** @var TokenReadabilityGuard */
     private $tokenGuard;
+    /** @var StorageNamesInterface */
+    private $storage;
 
     public function __construct(
         GitHubClientInterface $github,
@@ -64,7 +66,8 @@ final class Deployer implements DeployerInterface
         string $selfSlug,
         int $keepBackups,
         string $adminUrl,
-        TokenReadabilityGuard $tokenGuard
+        TokenReadabilityGuard $tokenGuard,
+        StorageNamesInterface $storage
     ) {
         $this->github = $github;
         $this->extractor = $extractor;
@@ -83,6 +86,7 @@ final class Deployer implements DeployerInterface
         $this->keepBackups = $keepBackups;
         $this->adminUrl = $adminUrl;
         $this->tokenGuard = $tokenGuard;
+        $this->storage = $storage;
     }
 
     public function deploy(Deployment $deployment, string $trigger, bool $force = false): Result
@@ -90,6 +94,10 @@ final class Deployer implements DeployerInterface
         $guard = $this->guardSelf($deployment);
         if ($guard !== null) {
             return $this->finish($deployment, $trigger, $guard, '');
+        }
+        $storageProblem = $this->storageProblem('Nothing was deployed.');
+        if ($storageProblem !== null) {
+            return $this->finish($deployment, $trigger, $storageProblem, '');
         }
         if (! $this->tokenGuard->check($deployment)) {
             return $this->finish(
@@ -133,6 +141,10 @@ final class Deployer implements DeployerInterface
 
     public function rollback(Deployment $deployment, string $trigger = 'manual-rollback'): Result
     {
+        $storageProblem = $this->storageProblem('Nothing was rolled back.');
+        if ($storageProblem !== null) {
+            return $this->finish($deployment, $trigger, $storageProblem, '');
+        }
         $root = isset($this->targetRoots[$deployment->targetType()])
             ? $this->targetRoots[$deployment->targetType()] : '';
         if ($root === '') {
@@ -160,11 +172,12 @@ final class Deployer implements DeployerInterface
             $zip
         );
         if (! $download->isOk()) {
+            self::discardFile($zip);
             return $download;
         }
 
         $extract = $this->extractor->extract($zip);
-        @unlink($zip);
+        self::discardFile($zip);
         if (! $extract->isOk()) {
             return $extract;
         }
@@ -172,6 +185,7 @@ final class Deployer implements DeployerInterface
 
         $valid = $this->validator->validate($newDir, $deployment->targetType(), $deployment->targetSlug());
         if (! $valid->isOk()) {
+            $this->extractor->cleanup($newDir);
             return $valid;
         }
 
@@ -232,6 +246,24 @@ final class Deployer implements DeployerInterface
         ));
 
         return $updated;
+    }
+
+    private function storageProblem(string $consequence): ?Result
+    {
+        try {
+            $this->storage->suffix();
+        } catch (\RuntimeException $e) {
+            return Result::fail('Deployward cannot use its backup folder: ' . $e->getMessage() . ' ' . $consequence);
+        }
+
+        return null;
+    }
+
+    private static function discardFile(string $path): void
+    {
+        if (is_file($path)) {
+            @unlink($path);
+        }
     }
 
     private function guardSelf(Deployment $deployment): ?Result

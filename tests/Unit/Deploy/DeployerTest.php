@@ -12,6 +12,7 @@ use Deployward\Deploy\ExtractorInterface;
 use Deployward\Deploy\HealthCheckerInterface;
 use Deployward\Deploy\MaintenanceModeInterface;
 use Deployward\Deploy\PayloadValidatorInterface;
+use Deployward\Deploy\StorageNamesInterface;
 use Deployward\GitHub\GitHubClientInterface;
 use Deployward\Log\DeployLogInterface;
 use Deployward\Notify\NotifierInterface;
@@ -104,8 +105,17 @@ final class DeployerTest extends TestCase
             'deployward',
             3,
             self::ADMIN_URL,
-            new TokenReadabilityGuard($mocks['repository'], $mocks['notifier'], self::ADMIN_URL)
+            new TokenReadabilityGuard($mocks['repository'], $mocks['notifier'], self::ADMIN_URL),
+            isset($mocks['storage']) ? $mocks['storage'] : $this->workingStorage()
         );
+    }
+
+    private function workingStorage(): StorageNamesInterface
+    {
+        $storage = Mockery::mock(StorageNamesInterface::class);
+        $storage->shouldReceive('suffix')->andReturn('abcdef0123456789');
+
+        return $storage;
     }
 
     public function test_refuses_to_deploy_itself(): void
@@ -588,5 +598,88 @@ final class DeployerTest extends TestCase
         );
 
         return array_merge($defaults, $overrides);
+    }
+
+    public function test_a_payload_that_fails_validation_is_cleaned_up(): void
+    {
+        $payloadDir = sys_get_temp_dir() . '/dw-payload-' . uniqid('', true);
+        mkdir($payloadDir, 0755, true);
+        $github = $this->githubMock();
+        $github->shouldReceive('resolveSha')->andReturn(Result::ok('newsha123'));
+        $github->shouldReceive('downloadZipball')->andReturn(Result::ok('/tmp/x.zip'));
+        $extractor = Mockery::mock(ExtractorInterface::class);
+        $extractor->shouldReceive('extract')->andReturn(Result::ok($payloadDir));
+        $extractor->shouldReceive('cleanup')->once()->with($payloadDir);
+        $validator = Mockery::mock(PayloadValidatorInterface::class);
+        $validator->shouldReceive('validate')->andReturn(Result::fail('Not a plugin'));
+        $log = Mockery::mock(DeployLogInterface::class);
+        $log->shouldReceive('record')->once();
+        $notifier = Mockery::mock(NotifierInterface::class);
+        $notifier->shouldReceive('notify')->once();
+        $mocks = $this->baseMocks(array(
+            'github' => $github, 'extractor' => $extractor, 'validator' => $validator, 'log' => $log, 'notifier' => $notifier,
+        ));
+
+        $result = $this->deployer($mocks)->deploy($this->deployment(), 'manual');
+
+        $this->assertFalse($result->isOk());
+        $this->assertStringContainsString('Not a plugin', $result->message());
+        @rmdir($payloadDir);
+    }
+
+    public function test_a_failed_download_does_not_leave_the_partial_zip_behind(): void
+    {
+        $zip = sys_get_temp_dir() . '/deployward-newsha12.zip';
+        file_put_contents($zip, 'partial');
+        $github = $this->githubMock();
+        $github->shouldReceive('resolveSha')->andReturn(Result::ok('newsha123'));
+        $github->shouldReceive('downloadZipball')->andReturn(Result::fail('connection reset'));
+        $log = Mockery::mock(DeployLogInterface::class);
+        $log->shouldReceive('record')->once();
+        $notifier = Mockery::mock(NotifierInterface::class);
+        $notifier->shouldReceive('notify')->once();
+        $mocks = $this->baseMocks(array('github' => $github, 'log' => $log, 'notifier' => $notifier));
+
+        $result = $this->deployer($mocks)->deploy($this->deployment(), 'manual');
+
+        $this->assertFalse($result->isOk());
+        $this->assertFileDoesNotExist($zip);
+    }
+
+    public function test_a_deploy_fails_clearly_when_the_storage_folder_name_cannot_be_read_or_stored(): void
+    {
+        $storage = Mockery::mock(StorageNamesInterface::class);
+        $storage->shouldReceive('suffix')->andThrow(new \RuntimeException('Deployward could not store the option deployward_dir_suffix.'));
+        $github = Mockery::mock(GitHubClientInterface::class);
+        $github->shouldNotReceive('resolveSha');
+        $log = Mockery::mock(DeployLogInterface::class);
+        $log->shouldReceive('record')->once();
+        $notifier = Mockery::mock(NotifierInterface::class);
+        $notifier->shouldReceive('notify')->once();
+        $mocks = $this->baseMocks(array('storage' => $storage, 'github' => $github, 'log' => $log, 'notifier' => $notifier));
+
+        $result = $this->deployer($mocks)->deploy($this->deployment(), 'manual');
+
+        $this->assertFalse($result->isOk());
+        $this->assertStringContainsString('could not store the option deployward_dir_suffix', $result->message());
+        $this->assertStringContainsString('Nothing was deployed', $result->message());
+    }
+
+    public function test_a_rollback_fails_clearly_when_the_storage_folder_name_cannot_be_read(): void
+    {
+        $storage = Mockery::mock(StorageNamesInterface::class);
+        $storage->shouldReceive('suffix')->andThrow(new \RuntimeException('Deployward could not store the option deployward_dir_suffix.'));
+        $backups = Mockery::mock(BackupManagerInterface::class);
+        $backups->shouldNotReceive('restoreLatest');
+        $log = Mockery::mock(DeployLogInterface::class);
+        $log->shouldReceive('record')->once();
+        $notifier = Mockery::mock(NotifierInterface::class);
+        $notifier->shouldReceive('notify')->once();
+        $mocks = $this->baseMocks(array('storage' => $storage, 'backups' => $backups, 'log' => $log, 'notifier' => $notifier));
+
+        $result = $this->deployer($mocks)->rollback($this->deployment());
+
+        $this->assertFalse($result->isOk());
+        $this->assertStringContainsString('could not store the option', $result->message());
     }
 }

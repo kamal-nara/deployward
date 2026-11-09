@@ -207,16 +207,16 @@ final class PluginCronTest extends TestCase
         );
     }
 
-    public function test_booting_stores_one_random_directory_suffix_and_reuses_it(): void
+    public function test_booting_never_touches_the_directory_suffix_so_a_storage_fault_cannot_break_a_request(): void
     {
         $this->bootEnvironment();
+        global $wpdb;
+        $wpdb->isFailing = true;
 
         Plugin::boot();
-        $first = $this->store[\Deployward\Deploy\StorageNames::OPTION];
-        Plugin::boot();
 
-        $this->assertMatchesRegularExpression('/^[a-f0-9]{16}$/', $first);
-        $this->assertSame($first, $this->store[\Deployward\Deploy\StorageNames::OPTION]);
+        $this->assertArrayNotHasKey(\Deployward\Deploy\StorageNames::OPTION, $this->store);
+        $this->assertSame(0, $wpdb->queries);
     }
 
     public function test_the_poll_hook_runs_when_wp_cron_fires_it_without_arguments(): void

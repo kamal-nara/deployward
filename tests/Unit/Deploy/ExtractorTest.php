@@ -92,4 +92,75 @@ final class ExtractorTest extends TestCase
 
         $this->assertDirectoryExists($stale . '/inner');
     }
+
+    private function stubUnzipThatFailsHalfway(): void
+    {
+        Functions\when('wp_mkdir_p')->alias(function ($dir) {
+            return is_dir($dir) || mkdir($dir, 0777, true);
+        });
+        Functions\when('WP_Filesystem')->justReturn(true);
+        Functions\when('wp_generate_password')->justReturn('abc12345');
+        Functions\when('is_wp_error')->alias(function ($value) {
+            return is_object($value) && method_exists($value, 'get_error_message');
+        });
+        Functions\when('unzip_file')->alias(function ($file, $dest) {
+            mkdir($dest . '/half-way/inner', 0777, true);
+            file_put_contents($dest . '/half-way/inner/file.txt', 'x');
+
+            return new class {
+                public function get_error_message(): string
+                {
+                    return 'Incompatible Archive.';
+                }
+            };
+        });
+    }
+
+    public function test_a_failed_unzip_leaves_no_partial_extract_directory_behind(): void
+    {
+        $this->stubUnzipThatFailsHalfway();
+        $work = $this->tmp . '/deployward-work-current';
+
+        $result = (new Extractor($work))->extract($this->tmp . '/whatever.zip');
+
+        $this->assertFalse($result->isOk());
+        $this->assertStringContainsString('Unzip failed', $result->message());
+        $this->assertDirectoryDoesNotExist($work . '/dw-extract-abc12345');
+    }
+
+    public function test_cleanup_removes_a_symlinked_extract_directory_without_touching_its_target(): void
+    {
+        $work = $this->tmp . '/deployward-work-current';
+        $outside = $this->tmp . '/outside';
+        mkdir($work, 0777, true);
+        mkdir($outside, 0777, true);
+        file_put_contents($outside . '/precious.txt', 'keep');
+        symlink($outside, $work . '/dw-extract-linked');
+
+        (new Extractor($work))->cleanup($work . '/dw-extract-linked');
+
+        $this->assertFileExists($outside . '/precious.txt');
+        $this->assertFalse(is_link($work . '/dw-extract-linked'));
+    }
+
+    public function test_a_lazy_work_directory_is_resolved_on_first_use_not_at_construction(): void
+    {
+        $calls = 0;
+        $work = $this->tmp . '/deployward-work-lazy';
+        $extractor = new Extractor(function () use (&$calls, $work) {
+            $calls++;
+
+            return $work;
+        });
+        $this->assertSame(0, $calls);
+        mkdir($work . '/dw-extract-one', 0777, true);
+        mkdir($work . '/dw-extract-two', 0777, true);
+
+        $extractor->cleanup($work . '/dw-extract-one');
+        $extractor->cleanup($work . '/dw-extract-two');
+
+        $this->assertSame(1, $calls);
+        $this->assertDirectoryDoesNotExist($work . '/dw-extract-one');
+        $this->assertDirectoryDoesNotExist($work . '/dw-extract-two');
+    }
 }

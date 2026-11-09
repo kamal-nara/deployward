@@ -8,20 +8,20 @@ final class Extractor implements ExtractorInterface
 {
     private const EXTRACT_PREFIX = 'dw-extract-';
 
-    /** @var string */
-    private $workBaseDir;
+    /** @var LazyPath */
+    private $base;
 
-    public function __construct(string $workBaseDir)
+    public function __construct($workBaseDir)
     {
-        $this->workBaseDir = rtrim($workBaseDir, '/');
+        $this->base = new LazyPath($workBaseDir);
     }
 
     public function extract(string $zipFile): Result
     {
-        if (! wp_mkdir_p($this->workBaseDir)) {
-            return Result::fail('Could not create work directory ' . $this->workBaseDir . ' (check that the uploads directory is writable)');
+        if (! wp_mkdir_p($this->base->get())) {
+            return Result::fail('Could not create work directory ' . $this->base->get() . ' (check that the uploads directory is writable)');
         }
-        $guard = $this->workBaseDir . '/index.php';
+        $guard = $this->base->get() . '/index.php';
         if (! is_file($guard)) {
             @file_put_contents($guard, "<?php\n// Silence is golden.\n");
         }
@@ -32,13 +32,15 @@ final class Extractor implements ExtractorInterface
         if (! \WP_Filesystem()) {
             return Result::fail('Could not initialise WP_Filesystem');
         }
-        $dest = $this->workBaseDir . '/' . self::EXTRACT_PREFIX . wp_generate_password(8, false);
+        $dest = $this->base->get() . '/' . self::EXTRACT_PREFIX . wp_generate_password(8, false);
         $unzipped = unzip_file($zipFile, $dest);
         if (is_wp_error($unzipped)) {
+            $this->deleteTree($dest);
             return Result::fail('Unzip failed: ' . $unzipped->get_error_message());
         }
         $root = $this->flatten($dest);
         if ($root === '' || ! is_dir($root)) {
+            $this->deleteTree($dest);
             return Result::fail('Unexpected archive layout');
         }
 
@@ -62,7 +64,7 @@ final class Extractor implements ExtractorInterface
     public function cleanup(string $extractedRoot): void
     {
         $container = $this->extractContainer($extractedRoot);
-        if ($container === null || ! is_dir($container) || dirname($container) !== $this->workBaseDir) {
+        if ($container === null || ! is_dir($container) || dirname($container) !== $this->base->get()) {
             return;
         }
         $this->deleteTree($container);
@@ -82,6 +84,10 @@ final class Extractor implements ExtractorInterface
 
     private function deleteTree(string $dir): void
     {
+        if (is_link($dir)) {
+            @unlink($dir);
+            return;
+        }
         $items = new \RecursiveIteratorIterator(
             new \RecursiveDirectoryIterator($dir, \FilesystemIterator::SKIP_DOTS),
             \RecursiveIteratorIterator::CHILD_FIRST

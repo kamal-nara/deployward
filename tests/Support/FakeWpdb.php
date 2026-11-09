@@ -19,6 +19,8 @@ final class FakeWpdb
     public $beforeInsert = null;
     /** @var bool */
     public $isFailing = false;
+    /** @var int */
+    public $queries = 0;
 
     public function __construct(array &$rows)
     {
@@ -36,6 +38,7 @@ final class FakeWpdb
 
     public function query(string $sql)
     {
+        $this->queries++;
         if ($this->isFailing) {
             $this->last_error = 'simulated database error';
             return false;

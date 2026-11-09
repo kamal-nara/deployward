@@ -4,14 +4,15 @@ namespace Deployward\Deploy;
 
 use Deployward\Support\WriteOnceOption;
 
-final class StorageNames
+final class StorageNames implements StorageNamesInterface
 {
     const OPTION = 'deployward_dir_suffix';
-    const FALLBACK = 'shared';
     const SUFFIX_PATTERN = '/^[A-Za-z0-9]{8,64}$/';
 
     /** @var WriteOnceOption */
     private $stored;
+    /** @var ?string */
+    private $resolved = null;
 
     public function __construct($wpdb)
     {
@@ -20,21 +21,25 @@ final class StorageNames
 
     public function suffix(): string
     {
-        try {
-            $suffix = $this->stored->read();
-            if ($suffix === '') {
-                $suffix = $this->stored->insertIfAbsent(bin2hex(random_bytes(8)));
-            }
-        } catch (\Throwable $e) {
-            error_log('Deployward: could not store the directory suffix, using a fixed name: ' . $e->getMessage());
-
-            return self::FALLBACK;
+        if ($this->resolved === null) {
+            $this->resolved = $this->resolve();
         }
-        if (preg_match(self::SUFFIX_PATTERN, $suffix) === 1) {
-            return $suffix;
-        }
-        error_log('Deployward: the stored directory suffix is not valid, using a fixed name.');
 
-        return self::FALLBACK;
+        return $this->resolved;
+    }
+
+    private function resolve(): string
+    {
+        $suffix = $this->stored->read();
+        if ($suffix === '') {
+            $suffix = $this->stored->insertIfAbsent(bin2hex(random_bytes(8)));
+        }
+        if (preg_match(self::SUFFIX_PATTERN, $suffix) !== 1) {
+            throw new \RuntimeException(
+                "Deployward's stored folder suffix is not valid, and it is never replaced automatically."
+            );
+        }
+
+        return $suffix;
     }
 }

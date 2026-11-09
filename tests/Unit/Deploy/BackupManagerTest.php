@@ -290,4 +290,36 @@ final class BackupManagerTest extends TestCase
         $this->assertNull($manager->latest('../escape'));
         $this->assertDirectoryExists($this->tmp . '/uploads/escape/20260101-000001-aaaaaaaa');
     }
+
+    public function test_restore_never_deletes_the_real_files_behind_a_symlinked_target(): void
+    {
+        $real = $this->tmp . '/real-plugin-checkout';
+        mkdir($real, 0777, true);
+        file_put_contents($real . '/dev-work.txt', 'uncommitted work');
+        mkdir($this->tmp . '/plugins', 0777, true);
+        symlink($real, $this->tmp . '/plugins/nara-core');
+        $this->makeBackup('deployward-backups-newsuffix', 'nara-core', '20260101-000001-aaaaaaaa', 'backup');
+
+        $result = $this->manager()->restoreLatest('nara-core', $this->tmp . '/plugins/nara-core');
+
+        $this->assertTrue($result->isOk(), $result->message());
+        $this->assertFileExists($real . '/dev-work.txt');
+        $this->assertSame('backup', file_get_contents($this->tmp . '/plugins/nara-core/version.txt'));
+    }
+
+    public function test_a_lazy_backup_directory_is_resolved_on_first_use_not_at_construction(): void
+    {
+        $calls = 0;
+        $manager = new BackupManager(function () use (&$calls) {
+            $calls++;
+
+            return $this->tmp . '/uploads/deployward-backups-lazy';
+        }, new DirectoryMover());
+        $this->assertSame(0, $calls);
+
+        $manager->latest('nara-core');
+        $manager->latest('nara-core');
+
+        $this->assertSame(1, $calls);
+    }
 }

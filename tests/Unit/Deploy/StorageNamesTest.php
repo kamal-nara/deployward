@@ -84,19 +84,47 @@ final class StorageNamesTest extends TestCase
         $this->assertSame('0011223344556677', (new StorageNames($this->db))->suffix());
     }
 
-    public function test_a_malformed_stored_value_is_left_alone_and_a_fixed_name_is_used(): void
+    public function test_a_malformed_stored_value_is_left_alone_and_refused(): void
     {
         $this->options[StorageNames::OPTION] = '../escape';
 
-        $this->assertSame(StorageNames::FALLBACK, (new StorageNames($this->db))->suffix());
+        try {
+            (new StorageNames($this->db))->suffix();
+            $this->fail('A malformed suffix must not be used.');
+        } catch (\RuntimeException $e) {
+            $this->assertStringContainsString('not valid', $e->getMessage());
+        }
+
         $this->assertSame('../escape', $this->options[StorageNames::OPTION]);
     }
 
-    public function test_a_database_failure_falls_back_instead_of_breaking_every_request(): void
+    public function test_a_database_failure_is_an_error_not_a_guessable_fallback_name(): void
     {
         $this->db->isFailing = true;
 
-        $this->assertSame(StorageNames::FALLBACK, (new StorageNames($this->db))->suffix());
+        try {
+            (new StorageNames($this->db))->suffix();
+            $this->fail('A failed write must not fall back to a fixed name.');
+        } catch (\RuntimeException $e) {
+            $this->assertStringContainsString('could not store', $e->getMessage());
+        }
+
         $this->assertSame(array(), $this->options);
+    }
+
+    public function test_there_is_no_fixed_fallback_suffix(): void
+    {
+        $this->assertFalse(defined(StorageNames::class . '::FALLBACK'));
+    }
+
+    public function test_the_suffix_is_looked_up_once_per_instance(): void
+    {
+        $names = new StorageNames($this->db);
+        $first = $names->suffix();
+        $queries = $this->db->queries;
+        $this->options = array();
+
+        $this->assertSame($first, $names->suffix());
+        $this->assertSame($queries, $this->db->queries);
     }
 }

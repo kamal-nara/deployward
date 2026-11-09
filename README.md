@@ -286,7 +286,7 @@ wp deployward log rin70qvs
 | Daily token expiry watch | WP-Cron hook `deployward_token_watch` |
 | Webhook endpoint | `POST /wp-json/deployward/v1/webhook/<deployment-id>` |
 
-The `<suffix>` is random, stored once in the `deployward_dir_suffix` option and never derived from the WordPress secret keys, so changing those keys does not move your backups. Backups sitting in any other `deployward-backups-*` folder (made by 0.5.0 or older, or before a secret key change) are still found for rollback and counted when old backups are pruned. Only folders named like a Deployward backup, directly under that deployment's name, are ever pruned.
+The `<suffix>` is random, stored once in the `deployward_dir_suffix` option and never derived from the WordPress secret keys, so changing those keys does not move your backups. It is read when a deploy or rollback needs it, never at page load; if it cannot be read or stored, that deploy or rollback stops with a clear message and nothing is changed. Backups sitting in any other `deployward-backups-*` folder (made by 0.5.0 or older, or before a secret key change) are still found for rollback and counted when old backups are pruned. Only folders named like a Deployward backup, directly under that deployment's name, are ever pruned.
 
 ## Troubleshooting
 
@@ -319,7 +319,7 @@ This produces `deployward-<version>.zip` (built from the last commit, dev files 
 
 ```bash
 composer install
-composer test        # PHPUnit (366 tests)
+composer test        # PHPUnit (380 tests)
 ```
 
 The plugin has no runtime Composer dependencies; `vendor/` is only needed for the test suite.
