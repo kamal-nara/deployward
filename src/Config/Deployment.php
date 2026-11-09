@@ -9,7 +9,7 @@ final class Deployment
     const POLL_INTERVALS = array(5, 15, 30, 60);
     const EXPIRY_WARNING_DAYS = 14;
     const LAST4_MIN_TOKEN_LENGTH = 8;
-    const TOKEN_FIELDS = array('token_last4', 'token_expires_at', 'token_checked_at', 'token_alerted');
+    const TOKEN_FIELDS = array('token_last4', 'token_expires_at', 'token_checked_at', 'token_alerted', 'token_unreadable_at');
 
     /** @var string */
     private $id;
@@ -279,6 +279,11 @@ final class Deployment
     public function tokenAlerted(): string
     {
         return $this->tokenState['token_alerted'];
+    }
+
+    public function tokenUnreadableAt(): string
+    {
+        return $this->tokenState['token_unreadable_at'];
     }
 
     public function tokenStatus(?\DateTimeImmutable $now = null): string

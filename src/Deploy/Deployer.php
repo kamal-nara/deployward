@@ -7,6 +7,7 @@ use Deployward\Config\DeploymentRepositoryInterface;
 use Deployward\GitHub\GitHubClientInterface;
 use Deployward\Log\DeployLogInterface;
 use Deployward\Notify\NotifierInterface;
+use Deployward\Security\TokenReadabilityGuard;
 use Deployward\Support\Result;
 
 final class Deployer implements DeployerInterface
@@ -43,6 +44,8 @@ final class Deployer implements DeployerInterface
     private $keepBackups;
     /** @var string */
     private $adminUrl;
+    /** @var TokenReadabilityGuard */
+    private $tokenGuard;
 
     public function __construct(
         GitHubClientInterface $github,
@@ -58,9 +61,10 @@ final class Deployer implements DeployerInterface
         array $targetRoots,
         string $healthUrl,
         string $tempDir,
-        string $selfSlug = 'deployward',
-        int $keepBackups = 3,
-        string $adminUrl = ''
+        string $selfSlug,
+        int $keepBackups,
+        string $adminUrl,
+        TokenReadabilityGuard $tokenGuard
     ) {
         $this->github = $github;
         $this->extractor = $extractor;
@@ -78,6 +82,7 @@ final class Deployer implements DeployerInterface
         $this->selfSlug = $selfSlug;
         $this->keepBackups = $keepBackups;
         $this->adminUrl = $adminUrl;
+        $this->tokenGuard = $tokenGuard;
     }
 
     public function deploy(Deployment $deployment, string $trigger, bool $force = false): Result
@@ -85,6 +90,14 @@ final class Deployer implements DeployerInterface
         $guard = $this->guardSelf($deployment);
         if ($guard !== null) {
             return $this->finish($deployment, $trigger, $guard, '');
+        }
+        if (! $this->tokenGuard->check($deployment)) {
+            return $this->finish(
+                $deployment,
+                $trigger,
+                Result::fail(TokenReadabilityGuard::deployFailureMessage($deployment->repo())),
+                ''
+            );
         }
 
         $shaResult = $this->github->resolveSha(

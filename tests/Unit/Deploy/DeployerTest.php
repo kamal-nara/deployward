@@ -15,6 +15,7 @@ use Deployward\Deploy\PayloadValidatorInterface;
 use Deployward\GitHub\GitHubClientInterface;
 use Deployward\Log\DeployLogInterface;
 use Deployward\Notify\NotifierInterface;
+use Deployward\Security\TokenReadabilityGuard;
 use Deployward\Support\Result;
 use Mockery;
 use Mockery\Adapter\Phpunit\MockeryPHPUnitIntegration;
@@ -102,7 +103,8 @@ final class DeployerTest extends TestCase
             sys_get_temp_dir(),
             'deployward',
             3,
-            self::ADMIN_URL
+            self::ADMIN_URL,
+            new TokenReadabilityGuard($mocks['repository'], $mocks['notifier'], self::ADMIN_URL)
         );
     }
 
@@ -379,6 +381,77 @@ final class DeployerTest extends TestCase
         $result = $this->deployer($mocks)->deploy($this->deployment(), 'cron');
 
         $this->assertFalse($result->isOk());
+    }
+
+    private function unreadableDeployment(array $overrides = array()): Deployment
+    {
+        return Deployment::fromArray(array_merge(array(
+            'id' => 'abc',
+            'repo' => 'Nara-IT/nara-core',
+            'branch' => 'main',
+            'visibility' => 'private',
+            'target_type' => 'plugin',
+            'target_slug' => 'nara-core',
+            'token' => '',
+            'token_unreadable' => true,
+            'webhook_secret' => 'whsec',
+        ), $overrides));
+    }
+
+    public function test_an_unreadable_token_fails_the_deploy_in_plain_words_without_calling_github(): void
+    {
+        $deployment = $this->unreadableDeployment();
+        $github = Mockery::mock(GitHubClientInterface::class);
+        $github->shouldNotReceive('resolveSha');
+        $github->shouldNotReceive('downloadZipball');
+        $repository = Mockery::mock(DeploymentRepositoryInterface::class);
+        $repository->shouldReceive('find')->with('abc')->andReturn($deployment);
+        $repository->shouldReceive('recordTokenState')->once()->with('abc', Mockery::on(function ($fields) {
+            return $fields['token_unreadable_at'] !== '';
+        }));
+        $logged = array();
+        $log = Mockery::mock(DeployLogInterface::class);
+        $log->shouldReceive('record')->once()->andReturnUsing(function ($row) use (&$logged) {
+            $logged = $row;
+        });
+        $kinds = array();
+        $notifier = Mockery::mock(NotifierInterface::class);
+        $notifier->shouldReceive('notify')->twice()->andReturnUsing(function ($subject, $body, $kind) use (&$kinds) {
+            $kinds[] = $kind;
+        });
+        $mocks = $this->baseMocks(array(
+            'github' => $github, 'repository' => $repository, 'log' => $log, 'notifier' => $notifier,
+        ));
+
+        $result = $this->deployer($mocks)->deploy($deployment, 'webhook');
+
+        $this->assertFalse($result->isOk());
+        $this->assertStringContainsString('cannot read the saved GitHub token for Nara-IT/nara-core', $result->message());
+        $this->assertStringContainsString('WordPress secret keys changed', $result->message());
+        $this->assertStringContainsString('stopped', $result->message());
+        $this->assertStringNotContainsString('Decryption failed', $result->message());
+        $this->assertSame('failed', $logged['status']);
+        $this->assertSame(array('alert', 'failure'), $kinds);
+    }
+
+    public function test_a_second_deploy_attempt_on_the_same_unreadable_token_sends_no_second_alert(): void
+    {
+        $deployment = $this->unreadableDeployment(array('token_unreadable_at' => '2026-11-09T08:00:00+00:00'));
+        $repository = Mockery::mock(DeploymentRepositoryInterface::class);
+        $repository->shouldNotReceive('recordTokenState');
+        $log = Mockery::mock(DeployLogInterface::class);
+        $log->shouldReceive('record')->once();
+        $kinds = array();
+        $notifier = Mockery::mock(NotifierInterface::class);
+        $notifier->shouldReceive('notify')->once()->andReturnUsing(function ($subject, $body, $kind) use (&$kinds) {
+            $kinds[] = $kind;
+        });
+        $mocks = $this->baseMocks(array('repository' => $repository, 'log' => $log, 'notifier' => $notifier));
+
+        $result = $this->deployer($mocks)->deploy($deployment, 'cron');
+
+        $this->assertFalse($result->isOk());
+        $this->assertSame(array('failure'), $kinds);
     }
 
     private function githubMock()

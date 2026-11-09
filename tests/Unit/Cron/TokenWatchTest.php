@@ -8,6 +8,7 @@ use Deployward\Config\Deployment;
 use Deployward\Config\DeploymentRepositoryInterface;
 use Deployward\Cron\TokenWatch;
 use Deployward\Notify\NotifierInterface;
+use Deployward\Security\TokenReadabilityGuard;
 use Mockery;
 use Mockery\Adapter\Phpunit\MockeryPHPUnitIntegration;
 use PHPUnit\Framework\TestCase;
@@ -57,7 +58,12 @@ final class TokenWatchTest extends TestCase
 
     private function watch($repository, $notifier): TokenWatch
     {
-        return new TokenWatch($repository, $notifier, self::ADMIN_URL);
+        return new TokenWatch(
+            $repository,
+            $notifier,
+            self::ADMIN_URL,
+            new TokenReadabilityGuard($repository, $notifier, self::ADMIN_URL)
+        );
     }
 
     private function repositoryWith(Deployment $deployment)

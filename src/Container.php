@@ -24,6 +24,7 @@ use Deployward\Security\Encryptor;
 use Deployward\Security\KeyRing;
 use Deployward\Security\OwnKeyStore;
 use Deployward\Security\OwnKeyStoreInterface;
+use Deployward\Security\TokenReadabilityGuard;
 
 final class Container
 {
@@ -60,9 +61,19 @@ final class Container
         return new Notifier($this->settings());
     }
 
+    public function tokenGuard(): TokenReadabilityGuard
+    {
+        return new TokenReadabilityGuard($this->repository(), $this->notifier(), $this->adminUrl());
+    }
+
     public function tokenWatch(): TokenWatch
     {
-        return new TokenWatch($this->repository(), $this->notifier(), admin_url('admin.php?page=deployward'));
+        return new TokenWatch($this->repository(), $this->notifier(), $this->adminUrl(), $this->tokenGuard());
+    }
+
+    private function adminUrl(): string
+    {
+        return admin_url('admin.php?page=deployward');
     }
 
     public function log(): DeployLogInterface
@@ -105,7 +116,8 @@ final class Container
             get_temp_dir(),
             defined('DEPLOYWARD_SLUG') ? DEPLOYWARD_SLUG : 'deployward',
             3,
-            admin_url('admin.php?page=deployward')
+            $this->adminUrl(),
+            $this->tokenGuard()
         );
     }
 }

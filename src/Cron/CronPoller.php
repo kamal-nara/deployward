@@ -6,6 +6,7 @@ use Deployward\Config\Deployment;
 use Deployward\Config\DeploymentRepositoryInterface;
 use Deployward\Deploy\DeploySchedulerInterface;
 use Deployward\GitHub\GitHubClientInterface;
+use Deployward\Security\TokenReadabilityGuard;
 
 final class CronPoller
 {
@@ -20,15 +21,19 @@ final class CronPoller
     private $github;
     /** @var DeploySchedulerInterface */
     private $scheduler;
+    /** @var TokenReadabilityGuard */
+    private $guard;
 
     public function __construct(
         DeploymentRepositoryInterface $repository,
         GitHubClientInterface $github,
-        DeploySchedulerInterface $scheduler
+        DeploySchedulerInterface $scheduler,
+        TokenReadabilityGuard $guard
     ) {
         $this->repository = $repository;
         $this->github = $github;
         $this->scheduler = $scheduler;
+        $this->guard = $guard;
     }
 
     public function poll(): void
@@ -63,6 +68,9 @@ final class CronPoller
 
     private function pollOne(Deployment $deployment): void
     {
+        if (! $this->guard->check($deployment)) {
+            return;
+        }
         $token = $deployment->visibility() === 'private' ? $deployment->token() : null;
         $result = $this->github->resolveSha($deployment->repo(), $deployment->branch(), $token);
         if (! $result->isOk()) {

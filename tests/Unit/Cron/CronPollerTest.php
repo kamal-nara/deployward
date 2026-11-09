@@ -8,6 +8,8 @@ use Deployward\Config\Deployment;
 use Deployward\Config\DeploymentRepositoryInterface;
 use Deployward\Cron\CronPoller;
 use Deployward\Deploy\DeploySchedulerInterface;
+use Deployward\Notify\NotifierInterface;
+use Deployward\Security\TokenReadabilityGuard;
 use Deployward\GitHub\GitHubClientInterface;
 use Deployward\Support\Result;
 use Mockery;
@@ -39,6 +41,40 @@ final class CronPollerTest extends TestCase
         ), $overrides));
     }
 
+    private function poller($repo, $github, $scheduler, ?NotifierInterface $notifier = null): CronPoller
+    {
+        $mailer = $notifier !== null ? $notifier : Mockery::mock(NotifierInterface::class);
+
+        return new CronPoller(
+            $repo,
+            $github,
+            $scheduler,
+            new TokenReadabilityGuard($repo, $mailer, 'https://nara.local/wp-admin/admin.php?page=deployward')
+        );
+    }
+
+    public function test_an_unreadable_private_token_is_not_sent_to_github_and_alerts_once(): void
+    {
+        Functions\when('get_option')->justReturn(array());
+        Functions\when('update_option')->justReturn(true);
+        $deployment = $this->deployment(array(
+            'visibility' => 'private', 'token' => '', 'token_unreadable' => true,
+            'poll_deploy' => true, 'last_deployed_sha' => 'oldsha',
+        ));
+        $repo = Mockery::mock(DeploymentRepositoryInterface::class);
+        $repo->shouldReceive('all')->andReturn(array('dw_abc' => $deployment));
+        $repo->shouldReceive('find')->with('dw_abc')->andReturn($deployment);
+        $repo->shouldReceive('recordTokenState')->once();
+        $github = Mockery::mock(GitHubClientInterface::class);
+        $github->shouldNotReceive('resolveSha');
+        $scheduler = Mockery::mock(DeploySchedulerInterface::class);
+        $scheduler->shouldNotReceive('schedule');
+        $notifier = Mockery::mock(NotifierInterface::class);
+        $notifier->shouldReceive('notify')->once()->with(Mockery::any(), Mockery::any(), NotifierInterface::KIND_ALERT);
+
+        $this->poller($repo, $github, $scheduler, $notifier)->poll();
+    }
+
     public function test_queues_deploy_when_sha_changed(): void
     {
         Functions\when('get_option')->justReturn(array());
@@ -52,7 +88,7 @@ final class CronPollerTest extends TestCase
         $scheduler = Mockery::mock(DeploySchedulerInterface::class);
         $scheduler->shouldReceive('schedule')->once()->with('dw_abc', 'cron', false);
 
-        (new CronPoller($repo, $github, $scheduler))->poll();
+        $this->poller($repo, $github, $scheduler)->poll();
     }
 
     public function test_does_not_queue_when_sha_unchanged(): void
@@ -68,7 +104,7 @@ final class CronPollerTest extends TestCase
         $scheduler = Mockery::mock(DeploySchedulerInterface::class);
         $scheduler->shouldNotReceive('schedule');
 
-        (new CronPoller($repo, $github, $scheduler))->poll();
+        $this->poller($repo, $github, $scheduler)->poll();
     }
 
     public function test_skips_when_sha_cannot_be_resolved(): void
@@ -84,7 +120,7 @@ final class CronPollerTest extends TestCase
         $scheduler = Mockery::mock(DeploySchedulerInterface::class);
         $scheduler->shouldNotReceive('schedule');
 
-        (new CronPoller($repo, $github, $scheduler))->poll();
+        $this->poller($repo, $github, $scheduler)->poll();
     }
 
     public function test_add_interval_registers_five_minutes(): void
@@ -115,7 +151,7 @@ final class CronPollerTest extends TestCase
             false
         );
 
-        (new CronPoller($repo, $github, $scheduler))->poll();
+        $this->poller($repo, $github, $scheduler)->poll();
     }
 
     public function test_webhook_only_deployment_is_never_polled_and_pruned_from_map(): void
@@ -139,7 +175,7 @@ final class CronPollerTest extends TestCase
             false
         );
 
-        (new CronPoller($repo, $github, $scheduler))->poll();
+        $this->poller($repo, $github, $scheduler)->poll();
     }
 
     public function test_enabled_and_never_polled_is_polled_and_timestamp_recorded(): void
@@ -163,7 +199,7 @@ final class CronPollerTest extends TestCase
         Functions\expect('update_option')->once()
             ->with(CronPoller::LAST_POLLS_OPTION, array('dw_b' => $now), false);
 
-        (new CronPoller($repo, $github, $scheduler))->poll();
+        $this->poller($repo, $github, $scheduler)->poll();
     }
 
     public function test_enabled_but_not_due_two_minutes_in_is_skipped_and_timestamp_carried(): void
@@ -187,7 +223,7 @@ final class CronPollerTest extends TestCase
         Functions\expect('update_option')->once()
             ->with(CronPoller::LAST_POLLS_OPTION, array('dw_c' => $now - 120), false);
 
-        (new CronPoller($repo, $github, $scheduler))->poll();
+        $this->poller($repo, $github, $scheduler)->poll();
     }
 
     public function test_enabled_and_due_sixteen_minutes_in_is_polled(): void
@@ -211,6 +247,6 @@ final class CronPollerTest extends TestCase
         Functions\expect('update_option')->once()
             ->with(CronPoller::LAST_POLLS_OPTION, array('dw_d' => $now), false);
 
-        (new CronPoller($repo, $github, $scheduler))->poll();
+        $this->poller($repo, $github, $scheduler)->poll();
     }
 }

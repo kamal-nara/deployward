@@ -59,7 +59,7 @@ final class Plugin
         }
 
         $scheduler = new DeployScheduler($container);
-        $poller = new CronPoller($container->repository(), $container->github(), $scheduler);
+        $poller = new CronPoller($container->repository(), $container->github(), $scheduler, $container->tokenGuard());
 
         add_filter('cron_schedules', array(__CLASS__, 'cronInterval'));
         self::ensureScheduled();

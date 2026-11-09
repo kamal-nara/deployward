@@ -157,9 +157,17 @@ final class DeploymentRepository implements DeploymentRepositoryInterface
                     ? (string) $stored['token_last4']
                     : Deployment::last4($incoming),
                 'token_unreadable' => false,
+                'token_unreadable_at' => $this->keptUnreadableAt($stored, $storedCipher),
             ),
             $this->keptExpiry($stored, $deployment)
         );
+    }
+
+    private function keptUnreadableAt(array $stored, string $storedCipher): string
+    {
+        $isUnreadable = $storedCipher !== '' && $this->decryptToken($storedCipher) === '';
+
+        return $isUnreadable && isset($stored['token_unreadable_at']) ? (string) $stored['token_unreadable_at'] : '';
     }
 
     private function keptExpiry(array $stored, Deployment $deployment): array
@@ -190,6 +198,7 @@ final class DeploymentRepository implements DeploymentRepositoryInterface
             'token_expires_at' => '',
             'token_checked_at' => '',
             'token_alerted' => '',
+            'token_unreadable_at' => '',
             'token_unreadable' => false,
         );
     }

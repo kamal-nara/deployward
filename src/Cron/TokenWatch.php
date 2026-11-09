@@ -5,6 +5,7 @@ namespace Deployward\Cron;
 use Deployward\Config\Deployment;
 use Deployward\Config\DeploymentRepositoryInterface;
 use Deployward\Notify\NotifierInterface;
+use Deployward\Security\TokenReadabilityGuard;
 
 final class TokenWatch
 {
@@ -20,15 +21,19 @@ final class TokenWatch
     private $notifier;
     /** @var string */
     private $adminUrl;
+    /** @var TokenReadabilityGuard */
+    private $guard;
 
     public function __construct(
         DeploymentRepositoryInterface $repository,
         NotifierInterface $notifier,
-        string $adminUrl
+        string $adminUrl,
+        TokenReadabilityGuard $guard
     ) {
         $this->repository = $repository;
         $this->notifier = $notifier;
         $this->adminUrl = $adminUrl;
+        $this->guard = $guard;
     }
 
     public function run(?\DateTimeImmutable $now = null): void
@@ -41,7 +46,7 @@ final class TokenWatch
 
     private function watch(Deployment $deployment, \DateTimeImmutable $now): void
     {
-        if ($deployment->visibility() !== 'private') {
+        if ($deployment->visibility() !== 'private' || ! $this->guard->check($deployment)) {
             return;
         }
         $expires = Deployment::parseTimestamp($deployment->tokenExpiresAt());
