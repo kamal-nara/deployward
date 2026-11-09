@@ -317,7 +317,7 @@ This produces `deployward-<version>.zip` (built from the last commit, dev files 
 
 ```bash
 composer install
-composer test        # PHPUnit (338 tests)
+composer test        # PHPUnit (342 tests)
 ```
 
 The plugin has no runtime Composer dependencies; `vendor/` is only needed for the test suite.
