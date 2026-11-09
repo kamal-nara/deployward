@@ -75,4 +75,22 @@ final class DirectoryMoverTest extends TestCase
         $this->assertStringContainsString($source, $result->message());
         $this->assertStringContainsString($dest, $result->message());
     }
+
+    public function test_a_copy_fallback_move_of_a_symlink_never_deletes_the_real_files(): void
+    {
+        $real = $this->sandbox . '/real-checkout';
+        mkdir($real, 0777, true);
+        file_put_contents($real . '/work.txt', 'uncommitted');
+        symlink($real, $this->sandbox . '/linked-plugin');
+        $mover = new DirectoryMover(static function (string $a, string $b): bool {
+            return false;
+        });
+
+        $result = $mover->move($this->sandbox . '/linked-plugin', $this->sandbox . '/moved');
+
+        $this->assertTrue($result->isOk(), $result->message());
+        $this->assertFileExists($real . '/work.txt');
+        $this->assertSame('uncommitted', file_get_contents($this->sandbox . '/moved/work.txt'));
+        $this->assertFalse(is_link($this->sandbox . '/linked-plugin'));
+    }
 }

@@ -91,6 +91,10 @@ final class DirectoryMover implements DirectoryMoverInterface
 
     private function deleteTree(string $dir): void
     {
+        if (is_link($dir)) {
+            @unlink($dir);
+            return;
+        }
         if (! is_dir($dir)) {
             return;
         }
