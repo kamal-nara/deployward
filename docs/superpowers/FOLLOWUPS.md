@@ -104,3 +104,12 @@ or alongside Plan 2/3.
 - `CronPoller::pollOne()` returns silently when resolveSha fails (no log line, no e-mail):
   log it and rate-limit an alert, so a poll-only deployment with a dead token is not
   quiet for days.
+
+## 0.6.0 follow-ups (token key rework)
+
+- `assets/admin.js` is still one 1,700+ line file: the split planned as 0.6.0's first commit was
+  ruled out so this release stays limited to the key and alert work. Do it as its own task.
+- **Check token** on an unreadable token still asks GitHub with no token and reports its HTTP error;
+  it should say the plain unreadable-token message instead (deploys, polls and the daily watch already do).
+- The one-alert-per-transition guard records the state just before it sends, so two processes that
+  detect the same transition within milliseconds could both send. A lock would close it if it ever happens.

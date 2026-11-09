@@ -77,7 +77,7 @@ Same flow, plus a token:
    - Permissions: **Contents: Read-only**. Nothing else is needed.
 3. Paste the token into the Token field and save.
 
-The token is encrypted with keys derived from your site's auth salts before it is stored. It is only ever sent to `api.github.com`.
+The token is encrypted with Deployward's own key before it is stored (see [Token encryption](#token-encryption)). It is only ever sent to `api.github.com`.
 
 ### The saved token is never lost by an edit
 
@@ -95,7 +95,7 @@ Each deployment card carries a token chip so you can see the state at a glance:
 | `Token expires in 5 days` (amber) | Inside the 14-day warning window. |
 | `Token expired` (red) | GitHub will refuse it. Replace it. |
 | `No token` (red) | Private repository with nothing saved. |
-| `Token unreadable, enter it again` (red) | The stored token no longer decrypts (site salts changed). Paste it again. |
+| `Token unreadable, enter it again` (red) | No key Deployward has can open the stored token (see [Token encryption](#token-encryption)). Paste it again. |
 
 **Check token** on a private deployment asks GitHub straight away, records the expiry it
 reports, and updates the chip without deploying anything.
@@ -115,6 +115,30 @@ avoid a silent stop:
 A GitHub App installation, which refreshes its own credentials, is the future tier for
 sites that cannot rotate a token by hand.
 
+## Token encryption
+
+A saved GitHub token is encrypted with libsodium before it is stored. Which key does that:
+
+1. **`DEPLOYWARD_ENCRYPTION_KEY`** in `wp-config.php`, when you define it as a string of at least 32 characters. Optional. It suits a host where the database is shared with another site or copied around and you want the key kept out of the database. A shorter value is ignored and flagged on the Settings tab.
+2. Otherwise **Deployward's own key**: 32 random bytes generated once, the first time a token needs encrypting, and kept in the `deployward_encryption_key` option. Nothing changes it automatically: not an update, not a change of the WordPress secret keys, not a cache flush. A database copied to a staging site carries the key with it, so the copied tokens keep working there.
+
+The WordPress secret keys (`AUTH_KEY`, `AUTH_SALT`) are **never used to encrypt** any more. Version 0.5.0 and older used them, so they stay in the list as a read-only fallback: a token saved by 0.5.0 is opened with them once and immediately saved again under the key above. If the secret keys were already changed before the upgrade, that token cannot be opened and has to be pasted again.
+
+The Settings tab shows which key is in use. Two WP-CLI commands cover the rest:
+
+- `wp deployward key-status` lists the primary key, any legacy keys and each deployment as `id repo token=readable|unreadable|none|migrated-now`.
+- `wp deployward rotate-key` is the only way the own key is replaced. It re-encrypts every readable token with a fresh key, refuses while any token is unreadable unless you add `--force`, and keeps the previous key until every token is safely saved with the new one. It does nothing while `DEPLOYWARD_ENCRYPTION_KEY` is the active key.
+
+Neither command, the Settings tab or any alert ever shows a token, a key or a ciphertext.
+
+### When a token can no longer be read
+
+If no key can open a stored token (for example the secret keys changed under a 0.5.0 token, the own key option was deleted, or the token was copied from another site), Deployward does not fail quietly:
+
+- One alert e-mail goes to the alert recipients when the token first becomes unreadable, even if failure e-mails are switched off. It is not repeated on every poll, deploy or daily check, and it starts again only after the token has been readable in between.
+- The daily token watch, every scheduled poll and every deploy check for it. A deploy stops with a plain message and the activity log says why, instead of a GitHub 404.
+- Pasting the token again in Deployward clears the state.
+
 ## Alerts and settings
 
 The **Settings** tab decides who hears about a deploy:
@@ -127,6 +151,8 @@ The **Settings** tab decides who hears about a deploy:
   a busy repository. Failures still go out.
 - **Send test e-mail**: sends "[Deployward] Test alert" to exactly the recipients above
   and reports the addresses it used, so you find out now rather than during an outage.
+
+The Settings tab also shows one status row, **Token encryption**, naming the key that protects the saved tokens.
 
 A failure e-mail carries the repository, the branch, what triggered the deploy, the time
 in the site's timezone, the reason, and a link straight to the Deployward screen.
@@ -197,6 +223,8 @@ Everything the UI does is also available via WP-CLI.
 | `wp deployward deploy <id>` | Deploy the latest commit now (`--force` redeploys even when up to date) |
 | `wp deployward rollback <id>` | Restore the previous version from backup |
 | `wp deployward log <id>` | Show the 20 most recent log entries for a deployment |
+| `wp deployward key-status` | Show which key protects the saved tokens and whether each token can be read |
+| `wp deployward rotate-key` | Replace Deployward's own key and re-encrypt every saved token (`--force` when some are unreadable) |
 
 ### `wp deployward add`
 
@@ -268,6 +296,8 @@ wp deployward log rin70qvs
 
 **"Health check failed, rolled back"**: the new version broke the site; Deployward already restored the previous version. Check the activity log for the reason, fix the code, push again.
 
+**"Deployward cannot read the saved GitHub token"** (also sent as an e-mail): no key can open the stored token, so deploys of that repository are stopped. Edit the deployment, paste the token again and save. Run `wp deployward key-status` to see which deployments are affected.
+
 **Webhook returns 401**: the secret in GitHub does not match. Re-copy it from the Webhook setup panel.
 
 **Deploys are slow to start after a push without a webhook**: that is the 5-minute polling fallback. Add the webhook for instant deploys.
@@ -287,7 +317,7 @@ This produces `deployward-<version>.zip` (built from the last commit, dev files 
 
 ```bash
 composer install
-composer test        # PHPUnit (223 tests)
+composer test        # PHPUnit (338 tests)
 ```
 
 The plugin has no runtime Composer dependencies; `vendor/` is only needed for the test suite.
@@ -295,7 +325,7 @@ The plugin has no runtime Composer dependencies; `vendor/` is only needed for th
 ## Security
 
 - Webhook requests are HMAC-verified (`X-Hub-Signature-256`, timing-safe comparison) before the payload is parsed.
-- GitHub tokens are encrypted at rest using keys derived from your site's salts.
+- GitHub tokens are encrypted at rest (libsodium secretbox) with a random key Deployward generates once and never changes by itself, or with `DEPLOYWARD_ENCRYPTION_KEY` from `wp-config.php`. The WordPress salts are only a read-only fallback for tokens saved by 0.5.0.
 - The backups and work directories are protected against direct web access.
 - All admin REST endpoints require the `manage_options` capability and a REST nonce.
 - Deployward will not deploy over its own folder.
