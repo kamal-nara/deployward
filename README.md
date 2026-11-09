@@ -278,13 +278,15 @@ wp deployward log rin70qvs
 
 | What | Where |
 |------|-------|
-| Backups (last 3 per deployment) | `wp-content/uploads/deployward-backups-<hash>/<slug>/` |
-| Extraction work directory | `wp-content/uploads/deployward-work-<hash>/` (cleaned after every deploy) |
+| Backups (last 3 per deployment) | `wp-content/uploads/deployward-backups-<suffix>/<slug>/` |
+| Extraction work directory | `wp-content/uploads/deployward-work-<suffix>/` (cleaned after every deploy) |
 | Activity log | `wp_deployward_log` database table |
 | Deployment settings | `wp_options` (one row per deployment, token encrypted, not autoloaded) |
 | Alert recipients and e-mail toggles | `wp_options`, `deployward_settings` (not autoloaded) |
 | Daily token expiry watch | WP-Cron hook `deployward_token_watch` |
 | Webhook endpoint | `POST /wp-json/deployward/v1/webhook/<deployment-id>` |
+
+The `<suffix>` is random, stored once in the `deployward_dir_suffix` option and never derived from the WordPress secret keys, so changing those keys does not move your backups. Backups sitting in any other `deployward-backups-*` folder (made by 0.5.0 or older, or before a secret key change) are still found for rollback and counted when old backups are pruned. Only folders named like a Deployward backup, directly under that deployment's name, are ever pruned.
 
 ## Troubleshooting
 
@@ -317,7 +319,7 @@ This produces `deployward-<version>.zip` (built from the last commit, dev files 
 
 ```bash
 composer install
-composer test        # PHPUnit (342 tests)
+composer test        # PHPUnit (366 tests)
 ```
 
 The plugin has no runtime Composer dependencies; `vendor/` is only needed for the test suite.
