@@ -177,6 +177,24 @@ final class KeyCommandTest extends TestCase
         $this->assertStringContainsString('1 unreadable token', \WP_CLI::$success[0]);
     }
 
+    public function test_rotate_key_ignores_a_force_switched_off(): void
+    {
+        $this->seed('lost', $this->sealWith(InMemoryKeyStore::randomKey(), 'ghp_lost'));
+        $old = $this->keys->currentKey;
+
+        foreach (array(false, '0', 'false') as $off) {
+            $message = '';
+            try {
+                $this->command()->rotate(array(), array('force' => $off));
+            } catch (\Exception $e) {
+                $message = $e->getMessage();
+            }
+            $this->assertStringContainsString('cannot be read', $message);
+        }
+
+        $this->assertSame($old, $this->keys->currentKey);
+    }
+
     private function anyLineContains(string $needle): bool
     {
         foreach (\WP_CLI::$lines as $line) {

@@ -39,7 +39,7 @@ final class Container
 
     public function ownKeyStore(): OwnKeyStoreInterface
     {
-        return new OwnKeyStore();
+        return new OwnKeyStore($this->wpdb);
     }
 
     public function keyRing(): KeyRing

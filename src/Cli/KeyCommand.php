@@ -53,7 +53,8 @@ final class KeyCommand
      */
     public function rotate(array $args, array $assoc): void
     {
-        $result = $this->rotator->rotate(isset($assoc['force']));
+        $isForced = filter_var(isset($assoc['force']) ? $assoc['force'] : false, FILTER_VALIDATE_BOOLEAN);
+        $result = $this->rotator->rotate($isForced);
         if (! $result->isOk()) {
             \WP_CLI::error($result->message());
             return;
