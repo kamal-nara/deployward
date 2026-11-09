@@ -113,3 +113,9 @@ or alongside Plan 2/3.
   it should say the plain unreadable-token message instead (deploys, polls and the daily watch already do).
 - The one-alert-per-transition guard records the state just before it sends, so two processes that
   detect the same transition within milliseconds could both send. A lock would close it if it ever happens.
+- `Container::deployer()` names the backups and work directories with `md5(AUTH_SALT)`. A change of the
+  WordPress secret keys therefore orphans every existing backup and rollback finds none: the same incident
+  class as the token key. It needs a stable name plus a one-off move of the existing directories.
+- `recordTokenState()` returns nothing and `Notifier::notify()` is fire and forget, so if the write that
+  records `token_unreadable_at` fails the alert would repeat on the next check, and an alert that
+  `wp_mail` drops is not retried. Both would need a return value to act on.
