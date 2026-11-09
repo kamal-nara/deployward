@@ -6,6 +6,8 @@ namespace Deployward\Tests\Support;
 final class FakeWpdb
 {
     /** @var string */
+    public $prefix = 'wp_';
+    /** @var string */
     public $options = 'wp_options';
     /** @var string */
     public $last_error = '';

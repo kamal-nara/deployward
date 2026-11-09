@@ -14,6 +14,7 @@ use Deployward\Deploy\Extractor;
 use Deployward\Deploy\HealthChecker;
 use Deployward\Deploy\MaintenanceMode;
 use Deployward\Deploy\PayloadValidator;
+use Deployward\Deploy\StorageNames;
 use Deployward\GitHub\GitHubClient;
 use Deployward\GitHub\GitHubClientInterface;
 use Deployward\Log\DeployLog;
@@ -95,10 +96,9 @@ final class Container
     public function deployer(): DeployerInterface
     {
         $uploads = wp_upload_dir();
-        $backupsBase = trailingslashit($uploads['basedir'])
-            . 'deployward-backups-' . substr(md5(AUTH_SALT), 0, 8);
-        $workBase = trailingslashit($uploads['basedir'])
-            . 'deployward-work-' . substr(md5(AUTH_SALT), 0, 8);
+        $suffix = (new StorageNames($this->wpdb))->suffix();
+        $backupsBase = trailingslashit($uploads['basedir']) . 'deployward-backups-' . $suffix;
+        $workBase = trailingslashit($uploads['basedir']) . 'deployward-work-' . $suffix;
         $muDir = defined('WPMU_PLUGIN_DIR') ? WPMU_PLUGIN_DIR : WP_CONTENT_DIR . '/mu-plugins';
         $mover = new DirectoryMover();
 

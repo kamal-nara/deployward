@@ -158,9 +158,10 @@ final class PluginCronTest extends TestCase
             return rtrim($path, '/') . '/';
         });
 
+        Functions\when('wp_cache_delete')->justReturn(true);
+
         global $wpdb;
-        $wpdb = Mockery::mock();
-        $wpdb->prefix = 'wp_';
+        $wpdb = new \Deployward\Tests\Support\FakeWpdb($this->store);
     }
 
     private function captureHook(string $hook): array
@@ -204,6 +205,18 @@ final class PluginCronTest extends TestCase
             'expired',
             $this->store[\Deployward\Config\DeploymentRepository::OPTION]['dw_expired']['token_alerted']
         );
+    }
+
+    public function test_booting_stores_one_random_directory_suffix_and_reuses_it(): void
+    {
+        $this->bootEnvironment();
+
+        Plugin::boot();
+        $first = $this->store[\Deployward\Deploy\StorageNames::OPTION];
+        Plugin::boot();
+
+        $this->assertMatchesRegularExpression('/^[a-f0-9]{16}$/', $first);
+        $this->assertSame($first, $this->store[\Deployward\Deploy\StorageNames::OPTION]);
     }
 
     public function test_the_poll_hook_runs_when_wp_cron_fires_it_without_arguments(): void
