@@ -24,9 +24,6 @@ final class DeployCommandTest extends TestCase
         Monkey\setUp();
         Functions\when('sanitize_key')->returnArg();
         Functions\when('wp_generate_password')->justReturn('generated');
-        if (! class_exists('WP_CLI')) {
-            eval('class WP_CLI { public static $errors = array(); public static $success = array(); public static function error($m) { self::$errors[] = $m; throw new \Exception($m); } public static function success($m) { self::$success[] = $m; } public static function log($m) {} public static function line($m) {} }');
-        }
         \WP_CLI::$errors = array();
         \WP_CLI::$success = array();
     }

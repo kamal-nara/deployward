@@ -4,6 +4,7 @@ namespace Deployward;
 
 use Deployward\Admin\AdminPage;
 use Deployward\Cli\DeployCommand;
+use Deployward\Cli\KeyCommand;
 use Deployward\Cron\CronPoller;
 use Deployward\Cron\TokenWatch;
 use Deployward\Deploy\DeployScheduler;
@@ -56,6 +57,9 @@ final class Plugin
 
         if (defined('WP_CLI') && WP_CLI) {
             \WP_CLI::add_command('deployward', self::makeCommand());
+            $keyCommand = self::makeKeyCommand();
+            \WP_CLI::add_command('deployward key-status', array($keyCommand, 'status'));
+            \WP_CLI::add_command('deployward rotate-key', array($keyCommand, 'rotate'));
         }
 
         $scheduler = new DeployScheduler($container);
@@ -92,6 +96,14 @@ final class Plugin
     public static function cronInterval(array $schedules): array
     {
         return CronPoller::addInterval($schedules);
+    }
+
+    public static function makeKeyCommand(): KeyCommand
+    {
+        global $wpdb;
+        $container = new Container($wpdb);
+
+        return new KeyCommand($container->keyRing(), $container->repository(), $container->keyRotator());
     }
 
     public static function makeCommand(): DeployCommand

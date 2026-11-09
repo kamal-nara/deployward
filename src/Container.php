@@ -22,6 +22,7 @@ use Deployward\Notify\Notifier;
 use Deployward\Notify\NotifierInterface;
 use Deployward\Security\Encryptor;
 use Deployward\Security\KeyRing;
+use Deployward\Security\KeyRotator;
 use Deployward\Security\OwnKeyStore;
 use Deployward\Security\OwnKeyStoreInterface;
 use Deployward\Security\TokenReadabilityGuard;
@@ -44,6 +45,11 @@ final class Container
     public function keyRing(): KeyRing
     {
         return KeyRing::fromConstants($this->ownKeyStore());
+    }
+
+    public function keyRotator(): KeyRotator
+    {
+        return new KeyRotator($this->keyRing(), $this->ownKeyStore(), $this->repository());
     }
 
     public function repository(): DeploymentRepositoryInterface

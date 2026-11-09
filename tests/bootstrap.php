@@ -5,3 +5,4 @@ if (! defined('ARRAY_A')) {
 }
 
 require_once dirname(__DIR__) . '/vendor/autoload.php';
+require_once __DIR__ . '/Support/wp-cli-stub.php';
