@@ -21,6 +21,9 @@ use Deployward\Log\DeployLogInterface;
 use Deployward\Notify\Notifier;
 use Deployward\Notify\NotifierInterface;
 use Deployward\Security\Encryptor;
+use Deployward\Security\KeyRing;
+use Deployward\Security\OwnKeyStore;
+use Deployward\Security\OwnKeyStoreInterface;
 
 final class Container
 {
@@ -32,9 +35,19 @@ final class Container
         $this->wpdb = $wpdb;
     }
 
+    public function ownKeyStore(): OwnKeyStoreInterface
+    {
+        return new OwnKeyStore();
+    }
+
+    public function keyRing(): KeyRing
+    {
+        return KeyRing::fromConstants($this->ownKeyStore());
+    }
+
     public function repository(): DeploymentRepositoryInterface
     {
-        return new DeploymentRepository(Encryptor::fromSalts());
+        return new DeploymentRepository(new Encryptor($this->keyRing()));
     }
 
     public function settings(): SettingsRepository

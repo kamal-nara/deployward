@@ -7,6 +7,8 @@ use Brain\Monkey\Functions;
 use Deployward\Config\Deployment;
 use Deployward\Config\DeploymentRepository;
 use Deployward\Security\Encryptor;
+use Deployward\Security\KeyRing;
+use Deployward\Tests\Support\InMemoryKeyStore;
 use PHPUnit\Framework\TestCase;
 
 final class DeploymentRepositoryTest extends TestCase
@@ -38,7 +40,7 @@ final class DeploymentRepositoryTest extends TestCase
 
     private function repository(): DeploymentRepository
     {
-        return new DeploymentRepository(new Encryptor(str_repeat('k', SODIUM_CRYPTO_SECRETBOX_KEYBYTES)));
+        return new DeploymentRepository(new Encryptor(KeyRing::fromMaterial(str_repeat('k', 32), '', new InMemoryKeyStore())));
     }
 
     private function deployment(): Deployment
