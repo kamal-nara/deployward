@@ -27,12 +27,31 @@ final class DeploymentRepository implements DeploymentRepositoryInterface
             if (! is_array($row)) {
                 continue;
             }
-            $cipher = isset($row['token']) ? (string) $row['token'] : '';
-            $plain = $this->decryptToken($cipher);
+            $read = $this->readToken((string) $id, self::cipherOf($row));
             $out[$id] = Deployment::fromArray(array_merge($row, array(
-                'token' => $plain,
-                'token_unreadable' => $cipher !== '' && $plain === '',
+                'token' => $read['plain'],
+                'token_unreadable' => $read['state'] === self::TOKEN_UNREADABLE,
             )));
+        }
+
+        return $out;
+    }
+
+    public function tokenStatuses(): array
+    {
+        $raw = get_option(self::OPTION, array());
+        if (! is_array($raw)) {
+            return array();
+        }
+        $out = array();
+        foreach ($raw as $id => $row) {
+            if (! is_array($row)) {
+                continue;
+            }
+            $out[$id] = array(
+                'repo' => isset($row['repo']) ? (string) $row['repo'] : '',
+                'state' => $this->readToken((string) $id, self::cipherOf($row))['state'],
+            );
         }
 
         return $out;
@@ -80,20 +99,26 @@ final class DeploymentRepository implements DeploymentRepositoryInterface
         return array_values(array_diff(Deployment::TOKEN_FIELDS, array('token_last4')));
     }
 
-    private function patchRow(string $id, array $changes): void
+    private function patchRow(string $id, array $changes, array $expected = array()): bool
     {
         if ($changes === array()) {
-            return;
+            return true;
         }
         $raw = get_option(self::OPTION, array());
         if (! is_array($raw) || ! isset($raw[$id]) || ! is_array($raw[$id])) {
-            return;
+            return false;
+        }
+        foreach ($expected as $key => $value) {
+            if (! isset($raw[$id][$key]) || (string) $raw[$id][$key] !== $value) {
+                return false;
+            }
         }
         $row = array_merge($raw[$id], $changes);
         if ($row === $raw[$id]) {
-            return;
+            return true;
         }
-        update_option(self::OPTION, array_merge($raw, array($id => $row)), false);
+
+        return (bool) update_option(self::OPTION, array_merge($raw, array($id => $row)), false);
     }
 
     public function delete(string $id): void
@@ -167,6 +192,44 @@ final class DeploymentRepository implements DeploymentRepositoryInterface
             'token_alerted' => '',
             'token_unreadable' => false,
         );
+    }
+
+    private static function cipherOf(array $row): string
+    {
+        return isset($row['token']) ? (string) $row['token'] : '';
+    }
+
+    private function readToken(string $id, string $cipher): array
+    {
+        if ($cipher === '') {
+            return array('plain' => '', 'state' => self::TOKEN_NONE);
+        }
+        try {
+            $plain = $this->encryptor->decrypt($cipher);
+            $isCurrent = $this->encryptor->usesPrimaryKey($cipher);
+        } catch (\Throwable $e) {
+            error_log('Deployward: failed to decrypt a stored token: ' . $e->getMessage());
+            return array('plain' => '', 'state' => self::TOKEN_UNREADABLE);
+        }
+
+        return array(
+            'plain' => $plain,
+            'state' => $isCurrent ? self::TOKEN_READABLE : $this->migrateToken($id, $cipher, $plain),
+        );
+    }
+
+    private function migrateToken(string $id, string $oldCipher, string $plain): string
+    {
+        try {
+            $fresh = $this->encryptor->encrypt($plain);
+            $isSound = $this->encryptor->usesPrimaryKey($fresh) && $this->encryptor->decrypt($fresh) === $plain;
+        } catch (\Throwable $e) {
+            error_log('Deployward: could not re-encrypt a stored token, left as it was: ' . $e->getMessage());
+            return self::TOKEN_NEEDS_MIGRATION;
+        }
+        $isSaved = $isSound && $this->patchRow($id, array('token' => $fresh), array('token' => $oldCipher));
+
+        return $isSaved ? self::TOKEN_MIGRATED_NOW : self::TOKEN_NEEDS_MIGRATION;
     }
 
     private function decryptToken(string $token): string
