@@ -62,7 +62,7 @@ final class Extractor implements ExtractorInterface
     public function cleanup(string $extractedRoot): void
     {
         $container = $this->extractContainer($extractedRoot);
-        if ($container === null || ! is_dir($container)) {
+        if ($container === null || ! is_dir($container) || dirname($container) !== $this->workBaseDir) {
             return;
         }
         $this->deleteTree($container);

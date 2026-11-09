@@ -81,4 +81,15 @@ final class ExtractorTest extends TestCase
 
         $this->assertDirectoryExists($keep);
     }
+
+    public function test_cleanup_never_deletes_an_extract_directory_outside_its_own_work_dir(): void
+    {
+        $stale = $this->tmp . '/deployward-work-oldsuffix/dw-extract-stale';
+        mkdir($stale . '/inner', 0777, true);
+        mkdir($this->tmp . '/deployward-work-newsuffix', 0777, true);
+
+        (new Extractor($this->tmp . '/deployward-work-newsuffix'))->cleanup($stale . '/inner');
+
+        $this->assertDirectoryExists($stale . '/inner');
+    }
 }
